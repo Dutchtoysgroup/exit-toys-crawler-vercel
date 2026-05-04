@@ -48,6 +48,7 @@ const FILES = [
   { name: "producten.json", key: "producten" },
   { name: "faqs.json", key: "faqs" },
   { name: "paginas.json", key: "paginas" },
+  { name: "marketplace-producten.json", key: "marketplace" },
   ...CATEGORY_SLUGS.map((slug) => ({
     name: `producten-${slug}.json`,
     key: `producten-${slug}`,
@@ -119,6 +120,7 @@ async function main() {
       producten: uploadResults.producten,
       faqs: uploadResults.faqs,
       paginas: uploadResults.paginas,
+      marketplace: uploadResults.marketplace,
     },
     categoryFiles,
     categorySlugs: CATEGORY_SLUGS,

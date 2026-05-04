@@ -46,3 +46,6 @@ crawler/state/
 crawler/logs/
 __pycache__/
 *.pyc
+
+# claude code local config
+.claude/

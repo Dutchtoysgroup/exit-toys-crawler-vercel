@@ -40,6 +40,7 @@ KB_PRODUCTEN_CATEGORY_FILES = {
     slug: OUTPUT_DIR / f"producten-{slug}.json"
     for slug in PRODUCT_CATEGORIES
 }
+KB_MARKETPLACE_FILE = OUTPUT_DIR / "marketplace-producten.json"
 
 # Website
 BASE_URL = LOCALE_CONFIG.base_url

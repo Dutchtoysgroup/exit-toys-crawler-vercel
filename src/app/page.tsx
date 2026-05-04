@@ -8,6 +8,13 @@ interface FileInfo {
   blobUrl: string;
 }
 
+interface MarketplaceEntry {
+  sku: string;
+  ean: string;
+  title: string;
+  content: string;
+}
+
 interface KBMetadata {
   locale?: string;
   lastUpdated: string;
@@ -26,6 +33,7 @@ interface KBMetadata {
     producten: FileInfo;
     faqs: FileInfo;
     paginas: FileInfo;
+    marketplace?: FileInfo;
   };
   categoryFiles?: Record<string, FileInfo>;
   categorySlugs?: string[];
@@ -128,6 +136,69 @@ export default async function Dashboard() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Marketplace Informatie */}
+      <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6">
+        <h2 className="mb-4 text-lg font-semibold">Marketplace Informatie</h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Productfeed met SKU, EAN, titel en volledige productinhoud.
+          Gebruikt dezelfde crawl-data als de kennisbank.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* NL Marketplace */}
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <span>🇳🇱</span>
+              <h3 className="font-medium text-gray-900">NL — exittoys.nl</h3>
+            </div>
+            {metaNL?.files?.marketplace ? (
+              <p className="mb-3 text-sm text-gray-500">
+                {metaNL.files.marketplace.entries.toLocaleString("nl-NL")} producten &middot;{" "}
+                {metaNL.files.marketplace.fileSizeMB} MB
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-yellow-600">Nog geen data (eerste crawl moet draaien)</p>
+            )}
+            <div className="rounded-md bg-gray-900 px-3 py-2 overflow-x-auto">
+              <code className="text-sm text-green-400 font-[family-name:var(--font-mono)]">
+                GET {BASE_URL}/api/marketplace/producten
+              </code>
+            </div>
+          </div>
+
+          {/* DE Marketplace */}
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <span>🇩🇪</span>
+              <h3 className="font-medium text-gray-900">DE — exittoys.de</h3>
+            </div>
+            {metaDE?.files?.marketplace ? (
+              <p className="mb-3 text-sm text-gray-500">
+                {metaDE.files.marketplace.entries.toLocaleString("nl-NL")} producten &middot;{" "}
+                {metaDE.files.marketplace.fileSizeMB} MB
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-yellow-600">Nog geen data (eerste crawl moet draaien)</p>
+            )}
+            <div className="rounded-md bg-gray-900 px-3 py-2 overflow-x-auto">
+              <code className="text-sm text-green-400 font-[family-name:var(--font-mono)]">
+                GET {BASE_URL}/api/de/marketplace/producten
+              </code>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs text-gray-500">
+            Retourneert een JSON array met per product:{" "}
+            <code className="rounded bg-gray-200 px-1 py-0.5 font-[family-name:var(--font-mono)]">sku</code>,{" "}
+            <code className="rounded bg-gray-200 px-1 py-0.5 font-[family-name:var(--font-mono)]">ean</code>,{" "}
+            <code className="rounded bg-gray-200 px-1 py-0.5 font-[family-name:var(--font-mono)]">title</code>,{" "}
+            <code className="rounded bg-gray-200 px-1 py-0.5 font-[family-name:var(--font-mono)]">content</code>
+          </p>
         </div>
       </div>
 

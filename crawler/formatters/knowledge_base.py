@@ -8,6 +8,7 @@ import shutil
 
 from config import (
     KB_FAQS_FILE,
+    KB_MARKETPLACE_FILE,
     KB_PAGINAS_FILE,
     KB_PRODUCTEN_FILE,
     KB_PRODUCTEN_CATEGORY_FILES,
@@ -18,6 +19,7 @@ from config import (
 )
 from formatters.blog_formatter import BlogFormatter
 from formatters.faq_formatter import FAQFormatter
+from formatters.marketplace_formatter import MarketplaceFormatter
 from formatters.page_formatter import PageFormatter
 from formatters.product_formatter import ProductFormatter
 
@@ -30,6 +32,7 @@ class KnowledgeBaseGenerator:
     def __init__(self):
         labels = LOCALE_CONFIG.labels
         self.product_fmt = ProductFormatter(labels)
+        self.marketplace_fmt = MarketplaceFormatter(labels)
         self.faq_fmt = FAQFormatter(labels)
         self.blog_fmt = BlogFormatter(labels, LOCALE_CONFIG.blog_categories)
         self.page_fmt = PageFormatter(LOCALE_CONFIG.page_keyword_map)
@@ -41,9 +44,10 @@ class KnowledgeBaseGenerator:
             results: Dict met keys products, faqs, blogs, pages, parts
 
         Returns:
-            Dict met keys 'producten', 'faqs', 'paginas' — elk een lijst van entries
+            Dict met keys 'producten', 'faqs', 'paginas', 'marketplace' — elk een lijst van entries
         """
         producten = []
+        marketplace = []
         faqs = []
         paginas = []
 
@@ -55,6 +59,12 @@ class KnowledgeBaseGenerator:
                 producten.append(entry)
             except Exception as e:
                 logger.error(f"Product format fout: {e}")
+            try:
+                mp_entry = self.marketplace_fmt.format(product)
+                if mp_entry:
+                    marketplace.append(mp_entry)
+            except Exception as e:
+                logger.error(f"Marketplace format fout: {e}")
 
         # Onderdelen (zelfde format als producten)
         parts = results.get("parts", [])
@@ -64,6 +74,12 @@ class KnowledgeBaseGenerator:
                 producten.append(entry)
             except Exception as e:
                 logger.error(f"Onderdeel format fout: {e}")
+            try:
+                mp_entry = self.marketplace_fmt.format(part)
+                if mp_entry:
+                    marketplace.append(mp_entry)
+            except Exception as e:
+                logger.error(f"Marketplace onderdeel format fout: {e}")
 
         # FAQs
         faq_items = results.get("faqs", [])
@@ -100,14 +116,16 @@ class KnowledgeBaseGenerator:
         producten = self._deduplicate(producten)
         faqs = self._deduplicate(faqs)
         paginas = self._deduplicate(paginas)
+        marketplace = self._deduplicate_marketplace(marketplace)
 
         logger.info(
             f"Kennisbank: {len(producten)} producten, "
-            f"{len(faqs)} FAQs, {len(paginas)} pagina's — "
+            f"{len(faqs)} FAQs, {len(paginas)} pagina's, "
+            f"{len(marketplace)} marketplace — "
             f"{len(producten) + len(faqs) + len(paginas)} totaal"
         )
 
-        return {"producten": producten, "faqs": faqs, "paginas": paginas}
+        return {"producten": producten, "faqs": faqs, "paginas": paginas, "marketplace": marketplace}
 
     def _categorize_product(self, entry: dict) -> str:
         """Bepaal de categorie-slug voor een product entry."""
@@ -128,10 +146,11 @@ class KnowledgeBaseGenerator:
         return "overig"
 
     def save(self, categorized: dict[str, list[dict]]):
-        """Sla de kennisbank op als JSON-bestanden (splits + per categorie + gecombineerd)."""
+        """Sla de kennisbank op als JSON-bestanden (splits + per categorie + gecombineerd + marketplace)."""
         producten = categorized["producten"]
         faqs = categorized["faqs"]
         paginas = categorized["paginas"]
+        marketplace = categorized.get("marketplace", [])
 
         # Strip category veld voor output (HALO verwacht alleen trigger/content)
         def strip_category(entries: list[dict]) -> list[dict]:
@@ -163,6 +182,11 @@ class KnowledgeBaseGenerator:
                 json.dump(clean_entries, f, ensure_ascii=False, indent=2)
             logger.info(f"Opgeslagen: {path} ({len(clean_entries)} {slug})")
 
+        # Marketplace bestand
+        with open(KB_MARKETPLACE_FILE, "w", encoding="utf-8") as f:
+            json.dump(marketplace, f, ensure_ascii=False, indent=2)
+        logger.info(f"Opgeslagen: {KB_MARKETPLACE_FILE} ({len(marketplace)} marketplace entries)")
+
         # Gecombineerd bestand (backward compatibility)
         with open(KNOWLEDGE_BASE_FILE, "w", encoding="utf-8") as f:
             json.dump(combined, f, ensure_ascii=False, indent=2)
@@ -184,5 +208,16 @@ class KnowledgeBaseGenerator:
             trigger = entry.get("trigger", "")
             if trigger not in seen:
                 seen.add(trigger)
+                unique.append(entry)
+        return unique
+
+    def _deduplicate_marketplace(self, entries: list[dict]) -> list[dict]:
+        """Verwijder duplicate marketplace entries op basis van SKU."""
+        seen = set()
+        unique = []
+        for entry in entries:
+            sku = entry.get("sku", "")
+            if sku not in seen:
+                seen.add(sku)
                 unique.append(entry)
         return unique

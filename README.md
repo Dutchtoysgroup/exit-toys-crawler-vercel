@@ -168,6 +168,26 @@ HALO is gekoppeld via een **API Connection**. Dit werkt als volgt:
 
 ---
 
+## Marketplace productfeed
+
+Naast de HALO-kennisbank levert dit systeem ook een **marketplace productfeed** met gestructureerde productinformatie. Bedoeld voor partners/collega's die alle productinfo per SKU/EAN nodig hebben.
+
+**Endpoints:**
+```
+GET https://exit-toys-crawler-vercel.vercel.app/api/marketplace/producten      (NL)
+GET https://exit-toys-crawler-vercel.vercel.app/api/de/marketplace/producten   (DE)
+```
+
+**Format** — JSON array met per product:
+- `sku` - Artikelnummer
+- `ean` - EAN-code (gtin13)
+- `title` - Producttitel
+- `content` - Volledige productinhoud (prijs, categorie, beschrijving, specs, USPs, FAQs, levertijd)
+
+Producten zonder SKU worden overgeslagen. De feed gebruikt dezelfde dagelijkse crawl als de HALO-kennisbank — geen extra requests naar exittoys.nl/.de.
+
+---
+
 ## Veelgestelde vragen
 
 ### De crawler is mislukt, wat nu?
