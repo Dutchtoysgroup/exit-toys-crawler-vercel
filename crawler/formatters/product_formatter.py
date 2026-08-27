@@ -51,6 +51,15 @@ class ProductFormatter:
             content_parts.append(f"{self.labels['price']}: \u20ac{price_formatted}")
         if sku:
             content_parts.append(f"{self.labels['sku']}: {sku}")
+
+        # Voorraad + levertijd
+        availability = product.get("availability", "")
+        if availability:
+            content_parts.append(self._labeled(self.labels["stock"], availability))
+        delivery = product.get("delivery", "")
+        if delivery:
+            content_parts.append(self._labeled(self.labels["delivery"], delivery))
+
         if category:
             content_parts.append(f"{self.labels['category']}: {category}")
         if model:
@@ -94,11 +103,6 @@ class ProductFormatter:
                 for spec in group["specs"]:
                     content_parts.append(f"{spec['key']}: {spec['value']}")
 
-        # Levertijd
-        delivery = product.get("delivery", "")
-        if delivery:
-            content_parts.append(f"\n{delivery}")
-
         # On-page FAQs
         faqs = product.get("faqs", [])
         if faqs:
@@ -118,6 +122,13 @@ class ProductFormatter:
             entry["category"] = category.lower()
 
         return entry
+
+    @staticmethod
+    def _labeled(label: str, text: str) -> str:
+        """Prefix met label, tenzij de tekst het label zelf al bevat."""
+        if text.lower().startswith(label.lower()):
+            return text
+        return f"{label}: {text}"
 
     def _get_spec_value(self, product: dict, key: str) -> str:
         """Zoek een specifieke spec waarde."""

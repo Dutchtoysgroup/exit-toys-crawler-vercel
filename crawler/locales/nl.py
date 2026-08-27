@@ -71,6 +71,8 @@ NL_CONFIG = LocaleConfig(
         "dimensions": "Afmetingen",
         "color": "Kleur",
         "color_spec_key": "Kleur",
+        "stock": "Voorraad",
+        "delivery": "Levertijd",
         "description": "Beschrijving",
         "features": "Kenmerken",
         "specifications": "Specificaties",

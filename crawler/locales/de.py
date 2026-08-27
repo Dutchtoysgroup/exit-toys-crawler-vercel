@@ -86,6 +86,8 @@ DE_CONFIG = LocaleConfig(
         "dimensions": "Abmessungen",
         "color": "Farbe",
         "color_spec_key": "Farbe",
+        "stock": "Verfügbarkeit",
+        "delivery": "Lieferzeit",
         "description": "Beschreibung",
         "features": "Merkmale",
         "specifications": "Spezifikationen",

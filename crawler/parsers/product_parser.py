@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -45,9 +46,12 @@ class ProductParser:
             data["size"] = jsonld.get("size", "")
             data["gtin13"] = jsonld.get("gtin13", "")
             offers = jsonld.get("offers", {})
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
             data["price"] = offers.get("price", "")
             data["currency"] = offers.get("priceCurrency", "EUR")
             data["availability"] = self.in_stock_text if "InStock" in offers.get("availability", "") else self.out_of_stock_text
+            data["stock_status"] = self._jsonld_stock_status(offers.get("availability", ""))
         else:
             # Fallback naar HTML data-attributen
             data["name"] = product_div.get("data-name", "")
@@ -74,10 +78,16 @@ class ProductParser:
         # On-page FAQs
         data["faqs"] = self._parse_product_faqs(soup)
 
+        # Voorraadstatus (on-page blok heeft voorrang op JSON-LD)
+        stock_text, stock_status = self._parse_stock(soup)
+        if stock_text:
+            data["availability"] = stock_text
+            data["stock_status"] = stock_status
+
         # Levertijd
-        shipping = soup.select_one("#div_productchoices .shipping .title")
-        if shipping:
-            data["delivery"] = shipping.get_text(strip=True)
+        delivery = self._parse_delivery(soup)
+        if delivery:
+            data["delivery"] = delivery
 
         return data
 
@@ -96,6 +106,87 @@ class ProductParser:
             except (json.JSONDecodeError, TypeError):
                 continue
         return None
+
+    # Class op het voorraadblok -> genormaliseerde status
+    STOCK_CLASS_STATUS = {
+        "nostock": "out_of_stock",
+        "expected": "expected",
+        "soldout": "sold_out",
+        "backorder": "backorder",
+    }
+
+    # schema.org availability -> genormaliseerde status
+    JSONLD_STOCK_STATUS = {
+        "InStock": "in_stock",
+        "LimitedAvailability": "in_stock",
+        "PreOrder": "expected",
+        "PreSale": "expected",
+        "BackOrder": "backorder",
+        "SoldOut": "sold_out",
+        "OutOfStock": "out_of_stock",
+        "Discontinued": "out_of_stock",
+    }
+
+    def _jsonld_stock_status(self, availability: str) -> str:
+        """Map een schema.org availability-URL naar een genormaliseerde status."""
+        for key, status in self.JSONLD_STOCK_STATUS.items():
+            if availability.endswith(f"/{key}") or availability == key:
+                return status
+        return "unknown"
+
+    def _parse_stock(self, soup: BeautifulSoup) -> tuple[str, str]:
+        """Extract voorraadstatus uit het blok onder de H1.
+
+        Voorbeelden: "Op voorraad, direct leverbaar", "Niet op voorraad",
+        "Verwacht per 02-12-2026", "Uitverkocht voor 2026".
+
+        Returns:
+            (tekst, genormaliseerde status)
+        """
+        stock_elem = soup.select_one("#div_productchoices .stock")
+        if not stock_elem:
+            return "", ""
+
+        # Werk op een kopie: de tooltip ("Wat betekent dit?") hoort niet in de tekst
+        stock_elem = copy.copy(stock_elem)
+        for elem in stock_elem.select(".tooltip, .viewtooltip"):
+            elem.decompose()
+
+        text = re.sub(r"\s+", " ", stock_elem.get_text(" ", strip=True)).strip()
+        if not text:
+            return "", ""
+
+        # Non-breaking hyphens in datums normaliseren
+        text = text.replace("\u2011", "-").replace("\xa0", " ")
+
+        status = "in_stock"
+        for cls in stock_elem.get("class", []):
+            if cls in self.STOCK_CLASS_STATUS:
+                status = self.STOCK_CLASS_STATUS[cls]
+                break
+
+        return text, status
+
+    def _parse_delivery(self, soup: BeautifulSoup) -> str:
+        """Extract de levertijd uit de bezorgtab.
+
+        Voorbeelden: "Levertijd: 2 - 3 werkdagen",
+        "Lieferung innerhalb von 2 - 3 Arbeitstagen".
+        """
+        tab = soup.select_one("div.tab.delivery")
+        if not tab:
+            return ""
+
+        content = tab.find_next_sibling("div")
+        if not content or "content" not in content.get("class", []):
+            return ""
+
+        for ctitle in content.select(".ctitle"):
+            text = re.sub(r"\s+", " ", ctitle.get_text(" ", strip=True)).strip()
+            if text:
+                return text
+
+        return ""
 
     def _parse_description(self, soup: BeautifulSoup) -> str:
         """Extract productbeschrijving inclusief 'lees meer' content."""

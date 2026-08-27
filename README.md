@@ -182,7 +182,7 @@ GET https://exit-toys-crawler-vercel.vercel.app/api/de/marketplace/producten   (
 - `sku` - Artikelnummer
 - `ean` - EAN-code (gtin13)
 - `title` - Producttitel
-- `content` - Volledige productinhoud (prijs, categorie, beschrijving, specs, USPs, FAQs, levertijd)
+- `content` - Volledige productinhoud (prijs, voorraadstatus, levertijd, categorie, beschrijving, specs, USPs, FAQs)
 
 Producten zonder SKU worden overgeslagen. De feed gebruikt dezelfde dagelijkse crawl als de HALO-kennisbank — geen extra requests naar exittoys.nl/.de.
 

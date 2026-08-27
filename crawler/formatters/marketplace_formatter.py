@@ -30,10 +30,13 @@ class MarketplaceFormatter:
                 price_formatted = price
             content_parts.append(f"{self.labels['price']}: €{price_formatted}")
 
-        # Beschikbaarheid
+        # Voorraad + levertijd
         availability = product.get("availability", "")
         if availability:
-            content_parts.append(f"Status: {availability}")
+            content_parts.append(self._labeled(self.labels["stock"], availability))
+        delivery = product.get("delivery", "")
+        if delivery:
+            content_parts.append(self._labeled(self.labels["delivery"], delivery))
 
         # Categorie
         category = product.get("category", "")
@@ -81,11 +84,6 @@ class MarketplaceFormatter:
                 for spec in group["specs"]:
                     content_parts.append(f"{spec['key']}: {spec['value']}")
 
-        # Levertijd
-        delivery = product.get("delivery", "")
-        if delivery:
-            content_parts.append(f"\n{delivery}")
-
         # On-page FAQs
         faqs = product.get("faqs", [])
         if faqs:
@@ -102,6 +100,13 @@ class MarketplaceFormatter:
             "title": title,
             "content": content,
         }
+
+    @staticmethod
+    def _labeled(label: str, text: str) -> str:
+        """Prefix met label, tenzij de tekst het label zelf al bevat."""
+        if text.lower().startswith(label.lower()):
+            return text
+        return f"{label}: {text}"
 
     def _get_spec_value(self, product: dict, key: str) -> str:
         for group in product.get("specifications", []):
