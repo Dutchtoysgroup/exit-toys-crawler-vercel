@@ -34,11 +34,15 @@ class BaseCrawler:
             await self.session.close()
 
     @retry(max_retries=3, backoff_factor=2.0, exceptions=(aiohttp.ClientError, asyncio.TimeoutError))
-    async def fetch(self, url: str) -> str | None:
-        """Haal een URL op met rate limiting en semaphore."""
+    async def fetch(self, url: str, timeout: float | None = None) -> str | None:
+        """Haal een URL op met rate limiting en semaphore.
+
+        `timeout` overschrijft REQUEST_TIMEOUT voor trage bestanden zoals grote sitemaps.
+        """
+        kwargs = {"timeout": aiohttp.ClientTimeout(total=timeout)} if timeout else {}
         async with self.semaphore:
             await self.rate_limiter.acquire()
-            async with self.session.get(url) as response:
+            async with self.session.get(url, **kwargs) as response:
                 if response.status == 404:
                     logger.debug(f"404: {url}")
                     return None
