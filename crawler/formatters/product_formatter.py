@@ -94,6 +94,9 @@ class ProductFormatter:
             for usp in usps:
                 content_parts.append(f"- {usp}")
 
+        # Aanbevolen accessoires
+        content_parts.extend(self._accessory_lines(product))
+
         # Specificaties
         specs = product.get("specifications", [])
         if specs:
@@ -122,6 +125,27 @@ class ProductFormatter:
             entry["category"] = category.lower()
 
         return entry
+
+    def _accessory_lines(self, product: dict) -> list[str]:
+        """Aanbevolen accessoires als regels: naam, artikelnummer, prijs, voorraad en link."""
+        accessories = product.get("accessories") or []
+        if not accessories:
+            return []
+        lines = [f"\n{self.labels['accessories']}:"]
+        for acc in accessories:
+            parts = [acc.get("name", ""), f"{self.labels['sku']} {acc.get('sku', '')}"]
+            price = acc.get("price", "")
+            if price:
+                try:
+                    parts.append(f"\u20ac{float(price):.2f}")
+                except (ValueError, TypeError):
+                    parts.append(f"\u20ac{price}")
+            if acc.get("availability"):
+                parts.append(acc["availability"])
+            if acc.get("url"):
+                parts.append(acc["url"])
+            lines.append("- " + " | ".join(p for p in parts if p))
+        return lines
 
     @staticmethod
     def _labeled(label: str, text: str) -> str:

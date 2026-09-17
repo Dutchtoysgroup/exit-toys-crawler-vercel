@@ -141,7 +141,9 @@ Na elke handmatige crawl moet je ook **handmatig een sync triggeren in Robin**, 
 
 | Type | Wat | Voorbeelden |
 |------|-----|-------------|
-| **Producten** | Alle productpagina's | Trampolines, zwembaden, speelhuisjes, sport |
+| **Producten** | Alle productpagina's (`sitemap-products.xml`) | Trampolines, zwembaden, speelhuisjes, sport |
+| **Onderdelen** | Losse onderdelen (`sitemap-spareparts.xml`) | Liners, beschermranden, veiligheidsnetten |
+| **Accessoires** | Per product de slider "Aanbevolen accessoires", met artikelnummer, prijs, voorraad en link | Afdekzeil en trap bij een zwembad |
 | **FAQs** | Veelgestelde vragen | Levering, retourneren, veiligheid, onderhoud |
 | **Blogs** | Alle blogartikelen | Tips, gidsen, productnieuws |
 | **Pagina's** | Informatiepagina's | Over ons, contact, leveringsinfo |
@@ -185,6 +187,22 @@ GET https://exit-toys-crawler-vercel.vercel.app/api/de/marketplace/producten   (
 - `content` - Volledige productinhoud (prijs, voorraadstatus, levertijd, categorie, beschrijving, specs, USPs, FAQs)
 
 Producten zonder SKU worden overgeslagen. De feed gebruikt dezelfde dagelijkse crawl als de HALO-kennisbank — geen extra requests naar exittoys.nl/.de.
+
+---
+
+## Bewaking: e-mail bij afwijkingen
+
+Na elke crawl vergelijkt `scripts/crawl-health.mjs` de kerncijfers (product-URL's, gelezen productpagina's, onderdelen, feed-items, accessoires, FAQ's, pagina's, blogs) met de mediaan van de laatste 7 runs. De historie staat in Vercel Blob onder `health/crawl-history-{nl,de}.json`.
+
+| Situatie | Wat er gebeurt |
+|----------|----------------|
+| Een cijfer is 10% of meer gedaald, of minder dan 90% van de product-URL's gaf een productpagina | E-mail naar `ALERT_EMAIL_TO`; de data wordt wél geüpload |
+| Producten, onderdelen of feed 30% of meer gedaald, of minder dan 100 onderdelen | E-mail én de upload wordt tegengehouden: de feed van de vorige run blijft live |
+| De workflow faalt | E-mail met link naar de run |
+
+Is een grote daling terecht (bijvoorbeeld een kleiner assortiment)? Start de workflow handmatig met **force_upload** aangevinkt.
+
+De mail gaat via Microsoft Graph met dezelfde app als het marketing-dashboard. Secrets: `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_SENDER`, `ALERT_EMAIL_TO`.
 
 ---
 

@@ -11,10 +11,12 @@ Gebruik:
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Voeg project root toe aan path
@@ -33,7 +35,7 @@ def _set_locale():
 
 _set_locale()
 
-from config import LOG_FORMAT, LOG_LEVEL, LOCALE, LOGS_DIR  # noqa: E402
+from config import KB_MARKETPLACE_FILE, LOG_FORMAT, LOG_LEVEL, LOCALE, LOGS_DIR, OUTPUT_DIR  # noqa: E402
 from crawlers.base import BaseCrawler
 from crawlers.blog_crawler import BlogCrawler
 from crawlers.category_crawler import CategoryCrawler
@@ -197,6 +199,7 @@ async def run_crawler(force: bool = False):
         generator = KnowledgeBaseGenerator()
         entries = generator.generate(state.all_results())
         generator.save(entries)
+        write_crawl_stats(state)
 
         state.set_phase("done")
 
@@ -212,6 +215,39 @@ async def run_crawler(force: bool = False):
     logger.info(f"Onderdelen:  {len(results.get('parts', []))}")
     logger.info(f"Totale tijd: {elapsed:.0f}s ({elapsed / 60:.1f} min)")
     logger.info("=" * 60)
+
+
+def write_crawl_stats(state: CrawlState) -> None:
+    """Schrijf kerncijfers van deze run weg voor de health check (scripts/crawl-health.mjs).
+
+    Een run kan "succesvol" eindigen terwijl er de helft van de site ontbreekt - zo
+    verdwenen in aug 2026 ongemerkt alle onderdelen. Deze cijfers maken dat meetbaar.
+    """
+    results = state.all_results()
+    products = results.get("products", [])
+    part_categories = {"onderdelen", "ersatzteile"}
+
+    marketplace_entries = 0
+    if KB_MARKETPLACE_FILE.exists():
+        marketplace_entries = len(json.loads(KB_MARKETPLACE_FILE.read_text(encoding="utf-8")))
+
+    discovered = len(state.get_discovered_urls("products"))
+    stats = {
+        "locale": LOCALE,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "product_urls": discovered,
+        "products": len(products),
+        "product_success_rate": round(len(products) / discovered, 4) if discovered else 0,
+        "parts": sum(1 for p in products if (p.get("category") or "").strip().lower() in part_categories),
+        "products_with_accessories": sum(1 for p in products if p.get("accessories")),
+        "marketplace_entries": marketplace_entries,
+        "faqs": len(results.get("faqs", [])),
+        "pages": len(results.get("pages", [])),
+        "blogs": len(results.get("blogs", [])),
+    }
+    stats_file = OUTPUT_DIR / "crawl-stats.json"
+    stats_file.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+    logger.info(f"Crawl-statistieken: {stats_file}")
 
 
 def main():

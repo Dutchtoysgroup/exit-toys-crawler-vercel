@@ -5,6 +5,11 @@ on:
     # Dagelijks om 04:00 UTC (06:00 Amsterdam)
     - cron: "0 4 * * *"
   workflow_dispatch:
+    inputs:
+      force_upload:
+        description: "Upload ook als de health check een sterke daling ziet (bewuste assortimentswijziging)"
+        type: boolean
+        default: false
 
 jobs:
   crawl-and-upload:
@@ -42,7 +47,22 @@ jobs:
           cd crawler
           python main.py --force --locale nl
 
+      - name: Health check (NL)
+        id: health_nl
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          CRAWLER_LOCALE: nl
+          FORCE_UPLOAD: ${{ inputs.force_upload }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          MS_GRAPH_TENANT_ID: ${{ secrets.MS_GRAPH_TENANT_ID }}
+          MS_GRAPH_CLIENT_ID: ${{ secrets.MS_GRAPH_CLIENT_ID }}
+          MS_GRAPH_CLIENT_SECRET: ${{ secrets.MS_GRAPH_CLIENT_SECRET }}
+          MS_GRAPH_SENDER: ${{ secrets.MS_GRAPH_SENDER }}
+        run: node scripts/crawl-health.mjs
+
       - name: Upload to Vercel Blob (NL)
+        if: steps.health_nl.outputs.skip_upload != 'true'
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: nl
@@ -54,8 +74,33 @@ jobs:
           cd crawler
           python main.py --force --locale de
 
+      - name: Health check (DE)
+        id: health_de
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          CRAWLER_LOCALE: de
+          FORCE_UPLOAD: ${{ inputs.force_upload }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          MS_GRAPH_TENANT_ID: ${{ secrets.MS_GRAPH_TENANT_ID }}
+          MS_GRAPH_CLIENT_ID: ${{ secrets.MS_GRAPH_CLIENT_ID }}
+          MS_GRAPH_CLIENT_SECRET: ${{ secrets.MS_GRAPH_CLIENT_SECRET }}
+          MS_GRAPH_SENDER: ${{ secrets.MS_GRAPH_SENDER }}
+        run: node scripts/crawl-health.mjs
+
       - name: Upload to Vercel Blob (DE)
+        if: steps.health_de.outputs.skip_upload != 'true'
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: de
         run: node scripts/upload-to-blob.mjs
+
+      - name: Mail bij mislukte run
+        if: failure()
+        env:
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          MS_GRAPH_TENANT_ID: ${{ secrets.MS_GRAPH_TENANT_ID }}
+          MS_GRAPH_CLIENT_ID: ${{ secrets.MS_GRAPH_CLIENT_ID }}
+          MS_GRAPH_CLIENT_SECRET: ${{ secrets.MS_GRAPH_CLIENT_SECRET }}
+          MS_GRAPH_SENDER: ${{ secrets.MS_GRAPH_SENDER }}
+        run: node scripts/crawl-health.mjs --failure

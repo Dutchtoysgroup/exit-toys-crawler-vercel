@@ -89,6 +89,9 @@ class ProductParser:
         if delivery:
             data["delivery"] = delivery
 
+        # Aanbevolen accessoires (slider onder de productinfo)
+        data["accessories"] = self._parse_accessories(soup, url)
+
         return data
 
     def _parse_jsonld(self, soup: BeautifulSoup) -> dict | None:
@@ -187,6 +190,46 @@ class ProductParser:
                 return text
 
         return ""
+
+    def _parse_accessories(self, soup: BeautifulSoup, page_url: str) -> list[dict]:
+        """Extract de slider "Aanbevolen accessoires" / "Empfohlenes Zubehör".
+
+        Staat in #div_relatedproducts als `.accessories .object`; de SKU zit in
+        data-identifier, de link in `.title a`. Het tabblad "Onderdelen" daarnaast
+        slaan we bewust over: die onderdelen komen al via sitemap-spareparts.xml binnen.
+        """
+        container = soup.select_one("#div_relatedproducts .accessories")
+        if not container:
+            return []
+
+        base = re.match(r"^https?://[^/]+", page_url)
+        base = base.group(0) if base else ""
+
+        items = []
+        seen = set()
+        for obj in container.select(".object"):
+            sku = (obj.get("data-identifier") or obj.get("data-id") or "").strip()
+            if not sku or sku in seen:
+                continue
+            seen.add(sku)
+
+            link = obj.select_one(".title a")
+            href = link.get("href", "") if link else ""
+            if href.startswith("/"):
+                href = base + href
+            name = re.sub(r"\s+", " ", link.get_text(" ", strip=True)) if link else obj.get("data-name", "")
+
+            stock_elem = obj.select_one(".stock")
+            stock = re.sub(r"\s+", " ", stock_elem.get_text(" ", strip=True)).strip() if stock_elem else ""
+
+            items.append({
+                "sku": sku,
+                "name": name,
+                "price": obj.get("data-price", ""),
+                "availability": stock.replace("\u2011", "-").replace("\xa0", " "),
+                "url": href,
+            })
+        return items
 
     def _parse_description(self, soup: BeautifulSoup) -> str:
         """Extract productbeschrijving inclusief 'lees meer' content."""
