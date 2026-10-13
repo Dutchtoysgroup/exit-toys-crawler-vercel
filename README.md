@@ -197,10 +197,15 @@ Na elke crawl vergelijkt `scripts/crawl-health.mjs` de kerncijfers (product-URL'
 | Situatie | Wat er gebeurt |
 |----------|----------------|
 | Een cijfer is 10% of meer gedaald, of minder dan 90% van de product-URL's gaf een productpagina | E-mail naar `ALERT_EMAIL_TO`; de data wordt wél geüpload |
-| Producten, onderdelen of feed 30% of meer gedaald, of minder dan 100 onderdelen | E-mail én de upload wordt tegengehouden: de feed van de vorige run blijft live |
+| Producten, onderdelen of feed 30% of meer gedaald, of minder dan 100 onderdelen | Upload wordt tegengehouden en de workflow krijgt een foutstatus; e-mail wordt geprobeerd. De feed van de vorige run blijft live |
+| Healthcheck crasht of kan de historie niet lezen/opslaan | Geen vrijgave voor upload en een foutstatus, ook met `force_upload` |
 | De workflow faalt | E-mail met link naar de run |
 
 Is een grote daling terecht (bijvoorbeeld een kleiner assortiment)? Start de workflow handmatig met **force_upload** aangevinkt.
+
+Upload vereist expliciet `ready=true` van een afgeronde healthcheck. De beoordeling wordt vóór de optionele e-mail geschreven: een mailfout kan een afgekeurde feed nooit vrijgeven. Een mailfout bij een toegestane of bewust geforceerde beoordeling geeft een waarschuwing en houdt de upload niet tegen. Een afkeuring of crash stopt ook de resterende crawl-/uploadstappen; eventuele eerdere uploads blijven staan.
+
+Offline regressietests: `npm test` (geen echte e-mails of Blob-uploads).
 
 De mail gaat via Microsoft Graph met dezelfde app als het marketing-dashboard. Secrets: `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_SENDER`, `ALERT_EMAIL_TO`.
 

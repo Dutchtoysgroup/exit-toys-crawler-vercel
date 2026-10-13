@@ -11,8 +11,9 @@
  *   als health/crawl-history-{locale}.json.
  * - Daalt een cijfer 10% of meer onder normaal: e-mail.
  * - Daalt een kritiek cijfer (producten, onderdelen, feed) 30% of meer, of zijn er minder
- *   dan 100 onderdelen: e-mail én skip_upload=true, zodat de live feed van gisteren blijft staan.
+ *   dan 100 onderdelen: foutstatus en ready=false, zodat de live feed van gisteren blijft staan.
  *   Een bewuste assortimentswijziging kun je forceren met workflow_dispatch force_upload.
+ * - Alleen een afgeronde, toegestane beoordeling schrijft ready=true. Mail is optioneel.
  *
  * Gebruik
  *   CRAWLER_LOCALE=nl node scripts/crawl-health.mjs            health check
@@ -145,7 +146,7 @@ function renderHealthEmail({ stats, rows, problems, blocked, baselineRuns }) {
     <p><strong>${
       blocked
         ? "De upload is tegengehouden: HALO en de API blijven de feed van de vorige geslaagde run gebruiken."
-        : "De nieuwe data is wel geüpload."
+        : "De nieuwe data is vrijgegeven voor upload."
     }</strong></p>
     <table style="border-collapse:collapse;margin:12px 0">
       <tr style="text-align:left;border-bottom:1px solid #d0d7de">
@@ -200,25 +201,35 @@ async function runHealthCheck() {
   }
 
   const status = problems.length === 0 ? "ok" : blocked ? "blocked" : "alert";
+  if (blocked) {
+    console.error(`::error::Health check ${LOCALE}: upload tegengehouden. ${problems.join("; ")}`);
+    process.exitCode = 1;
+  }
   if (!DRY_RUN) {
     await saveHistory([...history, { ...stats, status, run_url: runUrl }]);
+  }
+
+  // Schrijf de beoordeling voordat optionele notificaties kunnen falen.
+  // Bij een eerdere crash ontbreekt ready en houdt de workflow de upload tegen.
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `ready=${!blocked}\n`);
   }
 
   if (problems.length) {
     const subject = `[EXIT crawler] ${LOCALE.toUpperCase()}: ${problems.length} afwijking${problems.length > 1 ? "en" : ""}${blocked ? " - upload tegengehouden" : ""}`;
     console.log(`::warning::${subject}`);
-    await notify(subject, renderHealthEmail({ stats, rows, problems, blocked, baselineRuns }));
+    try {
+      await notify(subject, renderHealthEmail({ stats, rows, problems, blocked, baselineRuns }));
+    } catch (err) {
+      console.warn("::warning::Health-notificatie mislukt:", err);
+    }
   } else {
     console.log("Alles binnen normale marges.");
-  }
-
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `skip_upload=${blocked}\n`);
   }
 }
 
 (FAILURE_MODE ? runFailureMode() : runHealthCheck()).catch((err) => {
-  // Een kapotte health check mag de upload nooit blokkeren: skip_upload blijft dan leeg.
-  console.error("::warning::Health check gefaald:", err);
+  // Zonder expliciete vrijgave mag de workflow niets uploaden.
+  console.error("::error::Health check gefaald:", err);
   process.exit(1);
 });

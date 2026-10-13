@@ -41,6 +41,9 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Test healthcheck upload guard
+        run: npm test
+
       # === NL Crawl (exittoys.nl) ===
       - name: Run crawler (NL)
         run: |
@@ -49,7 +52,6 @@ jobs:
 
       - name: Health check (NL)
         id: health_nl
-        continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: nl
@@ -62,7 +64,7 @@ jobs:
         run: node scripts/crawl-health.mjs
 
       - name: Upload to Vercel Blob (NL)
-        if: steps.health_nl.outputs.skip_upload != 'true'
+        if: steps.health_nl.outputs.ready == 'true'
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: nl
@@ -76,7 +78,6 @@ jobs:
 
       - name: Health check (DE)
         id: health_de
-        continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: de
@@ -89,7 +90,7 @@ jobs:
         run: node scripts/crawl-health.mjs
 
       - name: Upload to Vercel Blob (DE)
-        if: steps.health_de.outputs.skip_upload != 'true'
+        if: steps.health_de.outputs.ready == 'true'
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           CRAWLER_LOCALE: de
