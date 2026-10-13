@@ -34,8 +34,9 @@ EXTRA_PRODUCT_SITEMAPS = [
 class SitemapParser:
     """Parst alle sitemaps en retourneert URLs per categorie."""
 
-    def __init__(self, crawler: BaseCrawler):
+    def __init__(self, crawler: BaseCrawler, state):
         self.crawler = crawler
+        self.state = state
 
     async def parse_all(self) -> dict[str, list[str]]:
         """Parse alle sitemaps en retourneer URLs per categorie.
@@ -50,10 +51,13 @@ class SitemapParser:
             xml = await self.crawler.fetch(sitemap_url, timeout=SITEMAP_TIMEOUT)
             if xml:
                 urls = self._extract_urls(xml)
+                if not urls:
+                    self.state.record_failure(sitemap_url)
                 categorized[category] = urls
                 logger.info(f"  {category}: {len(urls)} URLs")
             else:
                 categorized[category] = []
+                self.state.record_failure(sitemap_url)
                 logger.warning(f"  {category}: sitemap niet beschikbaar")
 
         for sitemap_url in EXTRA_PRODUCT_SITEMAPS:
@@ -61,11 +65,14 @@ class SitemapParser:
             xml = await self.crawler.fetch(sitemap_url, timeout=SITEMAP_TIMEOUT)
             if xml:
                 urls = self._extract_urls(xml)
+                if not urls:
+                    self.state.record_failure(sitemap_url)
                 bekend = set(categorized["products"])
                 nieuw = [u for u in urls if u not in bekend]
                 categorized["products"].extend(nieuw)
                 logger.info(f"  products (extra): {len(nieuw)} URLs")
             else:
+                self.state.record_failure(sitemap_url)
                 logger.warning(f"  {sitemap_url}: sitemap niet beschikbaar")
 
         total = sum(len(v) for v in categorized.values())

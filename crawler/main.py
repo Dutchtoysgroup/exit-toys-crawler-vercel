@@ -16,7 +16,6 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 # Voeg project root toe aan path
@@ -46,6 +45,7 @@ from crawlers.product_crawler import ProductCrawler
 from crawlers.sitemap_parser import SitemapParser
 from formatters.knowledge_base import KnowledgeBaseGenerator
 from utils.state import CrawlState
+from utils.health_stats import build_crawl_stats
 
 logger = logging.getLogger("crawler")
 
@@ -70,6 +70,8 @@ def setup_logging():
 async def run_crawler(force: bool = False):
     """Hoofdfunctie die de crawler orkestreert."""
     start_time = time.monotonic()
+    # Een afgebroken nieuwe run mag geen oud beoordelingsbestand achterlaten.
+    (OUTPUT_DIR / "crawl-stats.json").unlink(missing_ok=True)
 
     # State management
     state = CrawlState()
@@ -87,7 +89,7 @@ async def run_crawler(force: bool = False):
             logger.info("FASE 1: Sitemaps parsen")
             logger.info("=" * 60)
 
-            sitemap_parser = SitemapParser(crawler)
+            sitemap_parser = SitemapParser(crawler, state)
             sitemap_urls = await sitemap_parser.parse_all()
 
             # Sla ontdekte URLs op per categorie
@@ -106,7 +108,7 @@ async def run_crawler(force: bool = False):
 
             # Product discovery via categoriepagina's
             known_products = set(state.get_discovered_urls("sitemap_products"))
-            cat_crawler = CategoryCrawler(crawler)
+            cat_crawler = CategoryCrawler(crawler, state)
             extra_products = await cat_crawler.discover_products(known_products)
 
             # Combineer alle product URLs
@@ -186,6 +188,7 @@ async def run_crawler(force: bool = False):
             await parts_crawler.discover_and_crawl()
         except Exception as e:
             logger.error(f"Onderdelen crawl overgeslagen: {e}")
+            state.record_failure("parts:phase")
         state.set_phase("generate")
 
     # ============================================================
@@ -199,9 +202,9 @@ async def run_crawler(force: bool = False):
         generator = KnowledgeBaseGenerator()
         entries = generator.generate(state.all_results())
         generator.save(entries)
-        write_crawl_stats(state)
-
         state.set_phase("done")
+
+    write_crawl_stats(state)
 
     # Samenvatting
     elapsed = time.monotonic() - start_time
@@ -223,30 +226,13 @@ def write_crawl_stats(state: CrawlState) -> None:
     Een run kan "succesvol" eindigen terwijl er de helft van de site ontbreekt - zo
     verdwenen in aug 2026 ongemerkt alle onderdelen. Deze cijfers maken dat meetbaar.
     """
-    results = state.all_results()
-    products = results.get("products", [])
-    part_categories = {"onderdelen", "ersatzteile"}
-
     marketplace_entries = 0
     if KB_MARKETPLACE_FILE.exists():
         marketplace_entries = len(json.loads(KB_MARKETPLACE_FILE.read_text(encoding="utf-8")))
 
-    discovered = len(state.get_discovered_urls("products"))
-    stats = {
-        "locale": LOCALE,
-        "finished_at": datetime.now(timezone.utc).isoformat(),
-        "product_urls": discovered,
-        "products": len(products),
-        "product_success_rate": round(len(products) / discovered, 4) if discovered else 0,
-        "parts": sum(1 for p in products if (p.get("category") or "").strip().lower() in part_categories),
-        "products_with_accessories": sum(1 for p in products if p.get("accessories")),
-        "marketplace_entries": marketplace_entries,
-        "faqs": len(results.get("faqs", [])),
-        "pages": len(results.get("pages", [])),
-        "blogs": len(results.get("blogs", [])),
-    }
+    stats = build_crawl_stats(state, LOCALE, marketplace_entries)
     stats_file = OUTPUT_DIR / "crawl-stats.json"
-    stats_file.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+    stats_file.write_text(json.dumps(stats, indent=2, allow_nan=False), encoding="utf-8")
     logger.info(f"Crawl-statistieken: {stats_file}")
 
 

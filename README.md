@@ -192,20 +192,25 @@ Producten zonder SKU worden overgeslagen. De feed gebruikt dezelfde dagelijkse c
 
 ## Bewaking: e-mail bij afwijkingen
 
-Na elke crawl vergelijkt `scripts/crawl-health.mjs` de kerncijfers (product-URL's, gelezen productpagina's, onderdelen, feed-items, accessoires, FAQ's, pagina's, blogs) met de mediaan van de laatste 7 runs. De historie staat in Vercel Blob onder `health/crawl-history-{nl,de}.json`.
+Na elke crawl valideert `scripts/crawl-health.mjs` het stats-schema, land, eindstatus, aantallen en dekking. Daarna vergelijkt het de kerncijfers met zowel de mediaan van de laatste 7 goedgekeurde runs als de vorige goedgekeurde run. De historie staat in Vercel Blob onder `health/crawl-history-{nl,de}.json`; de vorige goedkeuring blijft ook na langdurige afkeuringen bewaard.
 
 | Situatie | Wat er gebeurt |
 |----------|----------------|
-| Een cijfer is 10% of meer gedaald, of minder dan 90% van de product-URL's gaf een productpagina | E-mail naar `ALERT_EMAIL_TO`; de data wordt wél geüpload |
-| Producten, onderdelen of feed 30% of meer gedaald, of minder dan 100 onderdelen | Upload wordt tegengehouden en de workflow krijgt een foutstatus; e-mail wordt geprobeerd. De feed van de vorige run blijft live |
+| Een cijfer is 10% of meer gedaald, zonder een blokkeergrond | E-mail naar `ALERT_EMAIL_TO`; de data wordt vrijgegeven |
+| Product-URL's, producten, onderdelen of feed 30% of meer gedaald ten opzichte van een van beide referenties | Upload wordt tegengehouden en de workflow krijgt een foutstatus; e-mail wordt geprobeerd |
+| Stats ontbreken/zijn ongeldig, verkeerd land, onvolledige crawl, een geregistreerde crawl-/parsefout of onvoldoende aantallen/dekking | Geen upload, ook niet met `force_upload` |
 | Healthcheck crasht of kan de historie niet lezen/opslaan | Geen vrijgave voor upload en een foutstatus, ook met `force_upload` |
 | De workflow faalt | E-mail met link naar de run |
 
-Is een grote daling terecht (bijvoorbeeld een kleiner assortiment)? Start de workflow handmatig met **force_upload** aangevinkt.
+Is een relatieve daling terecht (bijvoorbeeld een kleiner assortiment)? Start de workflow handmatig met **force_upload** aangevinkt. Schema-, volledigheids- en absolute veiligheidscontroles blijven verplicht.
+
+De conservatieve absolute grenzen staan per land in `scripts/lib/crawl-health-evaluation.mjs`. Voor NL én DE zijn dit minimaal 500 ontdekte en gelezen producten, 500 marketplace-items, 100 onderdelen en 100 reguliere producten. Alle ontdekte product-URL's moeten een product hebben opgeleverd; de marketplace-feed moet minimaal 90% van de gelezen producten inclusief aanvullende onderdelen bevatten. Ontbrekende of inconsistente aantallen en niet-eindige getallen worden afgekeurd.
+
+De crawler schrijft `schema_version=1`, `phase=done`, `crawl_status` en `error_count`. Mislukte fetches, parsing, sitemaps en onderdelenstappen worden in de hervatbare state bewaard en leiden tot `crawl_status=partial`. Alleen `completed` zonder fouten kan worden goedgekeurd. Oude historie zonder dit schema en expliciete `approved=true` telt niet als referentie: de eerste nieuwe run valt terug op alle absolute controles, met een zichtbare waarschuwing.
 
 Upload vereist expliciet `ready=true` van een afgeronde healthcheck. De beoordeling wordt vóór de optionele e-mail geschreven: een mailfout kan een afgekeurde feed nooit vrijgeven. Een mailfout bij een toegestane of bewust geforceerde beoordeling geeft een waarschuwing en houdt de upload niet tegen. Een afkeuring of crash stopt ook de resterende crawl-/uploadstappen; eventuele eerdere uploads blijven staan.
 
-Offline regressietests: `npm test` (geen echte e-mails of Blob-uploads).
+Offline regressietests: `npm test` en `python3.12 -m unittest discover -s crawler/tests` (met `crawler/requirements.txt` geïnstalleerd; geen echte crawls, e-mails of Blob-uploads). Beide suites draaien vóór de crawl in GitHub Actions.
 
 De mail gaat via Microsoft Graph met dezelfde app als het marketing-dashboard. Secrets: `MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `MS_GRAPH_SENDER`, `ALERT_EMAIL_TO`.
 

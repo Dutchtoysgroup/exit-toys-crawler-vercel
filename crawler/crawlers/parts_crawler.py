@@ -28,6 +28,7 @@ class PartsCrawler:
         try:
             from playwright.async_api import async_playwright
         except ImportError:
+            self.state.record_failure("parts:playwright-missing")
             logger.error(
                 "Playwright niet geinstalleerd. Run: "
                 "pip install playwright && playwright install chromium"
@@ -50,7 +51,9 @@ class PartsCrawler:
 
             try:
                 # Navigeer naar onderdelen pagina
-                await page.goto(PARTS_BASE_URL, wait_until="networkidle", timeout=30000)
+                response = await page.goto(PARTS_BASE_URL, wait_until="networkidle", timeout=30000)
+                if not response or response.status >= 400:
+                    raise RuntimeError("Onderdelen-index niet beschikbaar")
                 await asyncio.sleep(2)
 
                 product_urls = set()
@@ -73,7 +76,10 @@ class PartsCrawler:
                             href = await link.get_attribute("href")
                             if href and self.parts_path in href.lower():
                                 nav_url = href if href.startswith("http") else f"{BASE_URL}{href}"
-                                await page.goto(nav_url, wait_until="networkidle", timeout=15000)
+                                response = await page.goto(nav_url, wait_until="networkidle", timeout=15000)
+                                if not response or response.status >= 400:
+                                    self.state.record_failure(nav_url)
+                                    continue
                                 await asyncio.sleep(1)
 
                                 # Scroll voor lazy loading
@@ -82,6 +88,7 @@ class PartsCrawler:
                                 new_urls = await self._extract_product_urls(page)
                                 product_urls.update(new_urls)
                         except Exception as e:
+                            self.state.record_failure("parts:filter")
                             logger.debug(f"Filter navigatie fout: {e}")
 
                 # Paginering proberen
@@ -92,6 +99,9 @@ class PartsCrawler:
                     try:
                         resp = await page.goto(next_url, wait_until="networkidle", timeout=15000)
                         if not resp or resp.status != 200:
+                            # Een 404 is het normale einde van deze probe-paginering.
+                            if not resp or resp.status != 404:
+                                self.state.record_failure(next_url)
                             break
                         await asyncio.sleep(1)
                         new_urls = await self._extract_product_urls(page)
@@ -99,6 +109,7 @@ class PartsCrawler:
                             break
                         product_urls.update(new_urls)
                     except Exception:
+                        self.state.record_failure(next_url)
                         break
 
                 logger.info(f"Onderdelen totaal: {len(product_urls)} unieke URLs gevonden")
@@ -109,15 +120,20 @@ class PartsCrawler:
 
                 for i, url in enumerate(pending):
                     try:
-                        await page.goto(url, wait_until="networkidle", timeout=15000)
+                        response = await page.goto(url, wait_until="networkidle", timeout=15000)
+                        if not response or response.status >= 400:
+                            raise RuntimeError("Onderdeelpagina niet beschikbaar")
                         html = await page.content()
                         product = self.parser.parse(url, html)
                         if product:
                             product["type"] = "onderdeel"
                             results.append(product)
                             self.state.add_result("parts", product)
+                        else:
+                            self.state.record_failure(url)
                         self.state.mark_completed(url)
                     except Exception as e:
+                        self.state.record_failure(url)
                         logger.error(f"Onderdeel crawl fout {url}: {e}")
                         self.state.mark_completed(url)
 
@@ -126,6 +142,7 @@ class PartsCrawler:
                         logger.info(f"Onderdelen voortgang: {i + 1}/{len(pending)}")
 
             except Exception as e:
+                self.state.record_failure("parts:playwright")
                 logger.error(f"Playwright fout: {e}")
             finally:
                 await browser.close()

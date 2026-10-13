@@ -39,6 +39,8 @@ class BlogCrawler:
                 full_url = link if link.startswith("http") else f"{BASE_URL}{link}"
                 all_urls.add(full_url)
             logger.info(f"Blog index: {len(index_urls)} posts gevonden")
+        else:
+            self.state.record_failure(BLOG_INDEX_URL)
 
         # Filter de index pagina zelf eruit
         all_urls.discard(BLOG_INDEX_URL)
@@ -60,7 +62,8 @@ class BlogCrawler:
             batch = pending[i : i + BATCH_SIZE]
             html_map = await self.crawler.fetch_many(batch)
 
-            for url, html in html_map.items():
+            for url in batch:
+                html = html_map.get(url)
                 if html:
                     try:
                         blog = self.parser.parse(url, html)
@@ -68,11 +71,14 @@ class BlogCrawler:
                             self.state.add_result("blogs", blog)
                             progress.success()
                         else:
+                            self.state.record_failure(url)
                             progress.fail()
                     except Exception as e:
                         logger.error(f"Blog parse fout voor {url}: {e}")
+                        self.state.record_failure(url)
                         progress.fail()
                 else:
+                    self.state.record_failure(url)
                     progress.fail()
 
                 self.state.mark_completed(url)

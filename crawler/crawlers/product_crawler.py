@@ -39,7 +39,8 @@ class ProductCrawler:
             batch = pending[i : i + BATCH_SIZE]
             html_map = await self.crawler.fetch_many(batch)
 
-            for url, html in html_map.items():
+            for url in batch:
+                html = html_map.get(url)
                 if html:
                     try:
                         product = self.parser.parse(url, html)
@@ -48,11 +49,14 @@ class ProductCrawler:
                             self.state.add_result("products", product)
                             progress.success()
                         else:
+                            self.state.record_failure(url)
                             progress.fail()
                     except Exception as e:
                         logger.error(f"Parse fout voor {url}: {e}")
+                        self.state.record_failure(url)
                         progress.fail()
                 else:
+                    self.state.record_failure(url)
                     progress.fail()
 
                 self.state.mark_completed(url)

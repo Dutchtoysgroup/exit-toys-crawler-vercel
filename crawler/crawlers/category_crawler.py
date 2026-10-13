@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 class CategoryCrawler:
     """Crawlt categoriepagina's om extra product-URLs te ontdekken."""
 
-    def __init__(self, crawler: BaseCrawler):
+    def __init__(self, crawler: BaseCrawler, state):
         self.crawler = crawler
+        self.state = state
 
     async def discover_products(self, known_urls: set[str]) -> list[str]:
         """Ontdek product-URLs vanuit categoriepagina's.
@@ -34,6 +35,7 @@ class CategoryCrawler:
 
                 html = await self.crawler.fetch(url)
                 if not html:
+                    self.state.record_failure(url)
                     break
 
                 product_urls = self._extract_product_urls(html)

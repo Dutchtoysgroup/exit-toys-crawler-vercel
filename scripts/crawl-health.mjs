@@ -7,12 +7,12 @@
  *
  * Werking
  * - Leest /tmp/crawler-output-{locale}/crawl-stats.json (geschreven door main.py).
- * - "Normaal" = mediaan van de laatste 7 niet-tegengehouden runs, bewaard in Vercel Blob
- *   als health/crawl-history-{locale}.json.
- * - Daalt een cijfer 10% of meer onder normaal: e-mail.
- * - Daalt een kritiek cijfer (producten, onderdelen, feed) 30% of meer, of zijn er minder
- *   dan 100 onderdelen: foutstatus en ready=false, zodat de live feed van gisteren blijft staan.
- *   Een bewuste assortimentswijziging kun je forceren met workflow_dispatch force_upload.
+ * - Valideert schema, land, eindstatus, aantallen en dekking; absolute grenzen gelden
+ *   ook zonder historie en kunnen niet met force_upload worden omzeild.
+ * - Vergelijkt met de mediaan van de laatste 7 expliciet goedgekeurde runs én met de
+ *   vorige goedgekeurde run, bewaard als health/crawl-history-{locale}.json in Vercel Blob.
+ * - Een daling vanaf 10% geeft een melding; vanaf 30% op een kritiek cijfer wordt upload
+ *   geblokkeerd. Alleen die relatieve daling kan met force_upload worden toegestaan.
  * - Alleen een afgeronde, toegestane beoordeling schrijft ready=true. Mail is optioneel.
  *
  * Gebruik
@@ -26,6 +26,7 @@
 
 import { appendFileSync, readFileSync } from "fs";
 import { emailConfigured, sendEmail } from "./lib/graph-email.mjs";
+import { evaluate, isApprovedRun } from "./lib/crawl-health-evaluation.mjs";
 
 const LOCALE = process.env.CRAWLER_LOCALE || "nl";
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -33,34 +34,11 @@ const FAILURE_MODE = process.argv.includes("--failure");
 const STATS_FILE = process.env.HEALTH_STATS_FILE || `/tmp/crawler-output-${LOCALE}/crawl-stats.json`;
 const HISTORY_KEY = `health/crawl-history-${LOCALE}.json`;
 
-const BASELINE_RUNS = 7;
 const HISTORY_LIMIT = 60;
-const ALERT_DROP = 0.1;
-const BLOCK_DROP = 0.3;
-const MIN_SUCCESS_RATE = 0.9;
-// In aug 2026 bleef er precies 1 onderdeel over; "0" als grens had dat niet gevangen.
-const MIN_PARTS = 100;
-
-const METRICS = [
-  { key: "product_urls", label: "Product-URL's in sitemaps", critical: true },
-  { key: "products", label: "Productpagina's gelezen", critical: true },
-  { key: "parts", label: "Onderdelen", critical: true },
-  { key: "marketplace_entries", label: "Items in marketplace-feed", critical: true },
-  { key: "products_with_accessories", label: "Producten met accessoires", critical: false },
-  { key: "faqs", label: "FAQ's", critical: false },
-  { key: "pages", label: "Pagina's", critical: false },
-  { key: "blogs", label: "Blogs", critical: false },
-];
 
 const runUrl = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
   : "";
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -83,47 +61,17 @@ async function loadHistory() {
 
 async function saveHistory(history) {
   const { put } = await import("@vercel/blob");
-  await put(HISTORY_KEY, JSON.stringify(history.slice(-HISTORY_LIMIT), null, 2), {
+  // Ook na veel afkeuringen moet de vorige goedkeuring als referentie blijven staan.
+  const recent = history.slice(-HISTORY_LIMIT);
+  const approved = history.findLast((run) => isApprovedRun(run, LOCALE));
+  if (approved && !recent.includes(approved)) recent.splice(0, 1, approved);
+  await put(HISTORY_KEY, JSON.stringify(recent, null, 2), {
     access: "public",
     contentType: "application/json",
     addRandomSuffix: false,
     allowOverwrite: true,
     cacheControlMaxAge: 60,
   });
-}
-
-function evaluate(stats, history) {
-  const usable = history.filter((run) => run.status !== "blocked").slice(-BASELINE_RUNS);
-  const rows = [];
-  const problems = [];
-  let block = false;
-
-  for (const metric of METRICS) {
-    const current = stats[metric.key];
-    const previous = usable.map((run) => run[metric.key]).filter((v) => typeof v === "number");
-    const normal = previous.length ? median(previous) : null;
-    const change = normal ? (current - normal) / normal : null;
-    let level = "ok";
-    if (change !== null && change <= -ALERT_DROP) {
-      level = metric.critical && change <= -BLOCK_DROP ? "block" : "alert";
-      problems.push(`${metric.label}: ${current} i.p.v. normaal ${Math.round(normal)} (${Math.round(change * 100)}%)`);
-    }
-    if (level === "block") block = true;
-    rows.push({ ...metric, current, normal, change, level });
-  }
-
-  // Absolute ondergrenzen: gelden ook zonder historie (eerste run, of na een lange storing).
-  if (typeof stats.parts === "number" && stats.parts < MIN_PARTS) {
-    block = true;
-    problems.push(`Onderdelen: slechts ${stats.parts} gevonden (normaal ~1.500)`);
-  }
-  if (typeof stats.product_success_rate === "number" && stats.product_success_rate < MIN_SUCCESS_RATE) {
-    problems.push(
-      `Slechts ${Math.round(stats.product_success_rate * 100)}% van de product-URL's leverde een productpagina op (${stats.products} van ${stats.product_urls})`,
-    );
-  }
-
-  return { rows, problems, block, baselineRuns: usable.length };
 }
 
 function renderHealthEmail({ stats, rows, problems, blocked, baselineRuns }) {
@@ -154,11 +102,11 @@ function renderHealthEmail({ stats, rows, problems, blocked, baselineRuns }) {
         <th style="padding:4px 12px">Normaal</th><th style="padding:4px 0 4px 12px">Verschil</th>
       </tr>${tableRows}
     </table>
-    <p style="color:#59636e">"Normaal" is de mediaan van de laatste ${baselineRuns} runs. Productpagina's: ${Math.round((stats.product_success_rate ?? 0) * 100)}% van de URL's gelezen.</p>
+    <p style="color:#59636e">"Normaal" is de mediaan van de laatste ${baselineRuns} goedgekeurde runs; ook de vorige goedgekeurde run wordt afzonderlijk vergeleken. Productpagina's: ${Math.round((stats.product_success_rate ?? 0) * 100)}% van de URL's gelezen.</p>
     ${runUrl ? `<p><a href="${runUrl}">Bekijk de run en de logs</a></p>` : ""}
     <p style="color:#59636e">${
       blocked
-        ? "Klopt de daling wel (bijvoorbeeld een bewust kleiner assortiment)? Start de workflow dan handmatig met force_upload aan."
+        ? "Herstel onvolledige of ongeldige crawls eerst. Alleen een relatieve assortimentsdaling boven de absolute minimumgrenzen kan met force_upload worden toegestaan."
         : "Veelvoorkomende oorzaken: een nieuwe of hernoemde sitemap op exittoys, gewijzigde HTML van productpagina's, of blokkades/rate limiting."
     }</p>
   </div>`;
@@ -191,9 +139,10 @@ async function runFailureMode() {
 async function runHealthCheck() {
   const stats = JSON.parse(readFileSync(STATS_FILE, "utf-8"));
   const history = await loadHistory();
-  const { rows, problems, block, baselineRuns } = evaluate(stats, history);
+  const { rows, problems, block, hardBlock, baselineRuns } = evaluate(stats, history, LOCALE);
+  if (baselineRuns === 0) console.warn("::warning::Geen geldige goedgekeurde historie; absolute minimumgrenzen en dekking blijven verplicht");
   const forced = process.env.FORCE_UPLOAD === "true";
-  const blocked = block && !forced;
+  const blocked = hardBlock || (block && !forced);
 
   console.log(`Health check ${LOCALE}: ${baselineRuns} runs als referentie`);
   for (const r of rows) {
@@ -206,7 +155,7 @@ async function runHealthCheck() {
     process.exitCode = 1;
   }
   if (!DRY_RUN) {
-    await saveHistory([...history, { ...stats, status, run_url: runUrl }]);
+    await saveHistory([...history, { ...stats, status, approved: !blocked, run_url: runUrl }]);
   }
 
   // Schrijf de beoordeling voordat optionele notificaties kunnen falen.

@@ -41,6 +41,9 @@ class FAQCrawler:
                     all_urls.add(full_url)
             logger.info(f"FAQ index: {len(all_urls)} categoriepagina's gevonden")
 
+        if not all_urls:
+            self.state.record_failure(FAQ_INDEX_URL)
+
         # Sitemap FAQ URLs worden genegeerd (geven 404)
         logger.info(f"FAQ totaal: {len(all_urls)} unieke URLs (sitemap URLs overgeslagen)")
         return list(all_urls)
@@ -59,7 +62,8 @@ class FAQCrawler:
             batch = pending[i : i + BATCH_SIZE]
             html_map = await self.crawler.fetch_many(batch)
 
-            for url, html in html_map.items():
+            for url in batch:
+                html = html_map.get(url)
                 if html:
                     try:
                         faqs = self.parser.parse(url, html)
@@ -67,11 +71,14 @@ class FAQCrawler:
                             self.state.add_results("faqs", faqs)
                             progress.success()
                         else:
+                            self.state.record_failure(url)
                             progress.fail()
                     except Exception as e:
                         logger.error(f"FAQ parse fout voor {url}: {e}")
+                        self.state.record_failure(url)
                         progress.fail()
                 else:
+                    self.state.record_failure(url)
                     progress.fail()
 
                 self.state.mark_completed(url)

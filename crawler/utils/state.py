@@ -14,6 +14,7 @@ class CrawlState:
 
     def __init__(self):
         self.state = {
+            "failures": [],
             "completed_urls": [],
             "discovered_urls": {},
             "phase": "init",
@@ -52,6 +53,15 @@ class CrawlState:
         if url not in self.state["completed_urls"]:
             self.state["completed_urls"].append(url)
 
+    def record_failure(self, source: str):
+        """Afgehandeld betekent niet geslaagd; bewaar fouten ook bij hervatten."""
+        if source not in self.state["failures"]:
+            self.state["failures"].append(source)
+
+    @property
+    def error_count(self) -> int:
+        return len(self.state["failures"])
+
     def add_result(self, category: str, entry: dict):
         if category in self.state["results"]:
             self.state["results"][category].append(entry)
@@ -87,6 +97,7 @@ class CrawlState:
 
     def reset(self):
         self.state = {
+            "failures": [],
             "completed_urls": [],
             "discovered_urls": {},
             "phase": "init",

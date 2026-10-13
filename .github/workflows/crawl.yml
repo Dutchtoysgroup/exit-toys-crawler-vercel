@@ -42,7 +42,9 @@ jobs:
         run: npm ci
 
       - name: Test healthcheck upload guard
-        run: npm test
+        run: |
+          npm test
+          python -m unittest discover -s crawler/tests
 
       # === NL Crawl (exittoys.nl) ===
       - name: Run crawler (NL)
