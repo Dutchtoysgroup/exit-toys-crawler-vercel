@@ -1,5 +1,7 @@
-import { head } from "@vercel/blob";
+import { readFeedManifest } from "@/lib/feed-manifest.mjs";
 import TriggerCrawlButton from "./components/TriggerCrawlButton";
+
+export const dynamic = "force-dynamic";
 
 interface FileInfo {
   entries: number;
@@ -74,12 +76,9 @@ function normalizeEntries(entries: KBMetadata["entries"]) {
   };
 }
 
-async function getMetadata(blobKey: string): Promise<KBMetadata | null> {
+async function getMetadata(locale: "nl" | "de"): Promise<KBMetadata | null> {
   try {
-    const blobMeta = await head(blobKey);
-    const response = await fetch(blobMeta.url, { next: { revalidate: 300 } });
-    if (!response.ok) return null;
-    return response.json();
+    return (await readFeedManifest(locale))?.manifest ?? null;
   } catch {
     return null;
   }
@@ -94,8 +93,8 @@ function formatDate(iso: string): string {
 }
 
 export default async function Dashboard() {
-  const metaNL = await getMetadata("exittoys_metadata.json");
-  const metaDE = await getMetadata("de/exittoys_metadata.json");
+  const metaNL = await getMetadata("nl");
+  const metaDE = await getMetadata("de");
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12 font-[family-name:var(--font-sans)]">

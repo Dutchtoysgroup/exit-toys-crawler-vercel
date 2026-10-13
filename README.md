@@ -170,6 +170,22 @@ HALO is gekoppeld via een **API Connection**. Dit werkt als volgt:
 
 ---
 
+## Volledige generaties publiceren
+
+Een publicatie wisselt per land één volledig gecontroleerde generatie in. `scripts/upload-to-blob.mjs` leest eerst alle 14 JSON-bestanden en controleert hun structuur, verplichte velden, duplicaten en samenhang: de gecombineerde kennisbank moet overeenkomen met de losse feeds en alle productcategorieën samen met de productfeed.
+
+Daarna worden de bestanden zonder overschrijven opgeslagen onder `generations/{nl,de}/{run}-{attempt}-{uuid}/`. De uploader leest elk bestand terug en vergelijkt grootte en SHA-256 met het vooraf gecontroleerde bestand. Pas nadat ook het onveranderlijke `manifest.json` is geschreven en teruggelezen, wordt `exittoys_metadata.json` (of `de/exittoys_metadata.json`) als laatste write vervangen. Dit metadata-bestand is het actieve manifest voor zowel de API als het dashboard.
+
+Een fout vóór deze laatste write laat de vorige volledige generatie actief. Reeds geüploade stagingbestanden blijven ongebruikt staan. De pointerwrite gebruikt de oorspronkelijke ETag (`ifMatch`); een concurrerende wijziging laat de publicatie falen. Bij de eerste publicatie is alleen aanmaken toegestaan. Runnummer en poging voorkomen ook dat een oude workflowrun na een nieuwere publicatie alsnog actief wordt. De workflow serialiseert alle runs met één concurrencygroep, onafhankelijk van branch; een lopende run wordt niet geannuleerd.
+
+Alle bestaande API-URL's blijven bestaan. Ze lezen één manifest en halen het betreffende onveranderlijke bestand op. Ze gebruiken geen afzonderlijke uurcaches meer. Bij leesfouten of een ongeldig generatie-manifest volgt een foutstatus, geen terugval op losse oude bestanden. Alleen vóór de eerste generatiepublicatie zijn de bestaande vaste Blob-keys nog de bron; die keys worden door de nieuwe uploader niet meer overschreven. Rechtstreekse consumenten van oude Blob-URL's moeten de API gebruiken om nieuwe publicaties te ontvangen. `stuklijst.json` wordt afzonderlijk beheerd en valt buiten deze generaties.
+
+Wie meerdere API-feeds als één snapshot verwerkt, bewaart de `X-Feed-Generation`-header van de eerste respons en geeft `?generation=<waarde>` mee aan vervolgrequests. Zo blijven ook requests die een publicatiewissel kruisen op dezelfde generatie. Dit werkt voor zowel NL als DE; een generatie hoort bij één land. Oude generaties blijven daarvoor beschikbaar. Zonder vastgezette generatie gebruikt iedere request het dan actieve manifest.
+
+Publicatie vereist `BLOB_READ_WRITE_TOKEN`, `CRAWLER_LOCALE`, `GITHUB_RUN_NUMBER` en `GITHUB_RUN_ATTEMPT`; GitHub Actions levert de rungegevens automatisch. Een eventuele time-out tijdens de laatste pointerwrite kan betekenen dat de oude óf de nieuwe volledige generatie actief is. Er wordt dan geen rollback of ongecontroleerde retry uitgevoerd.
+
+---
+
 ## Marketplace productfeed
 
 Naast de HALO-kennisbank levert dit systeem ook een **marketplace productfeed** met gestructureerde productinformatie. Bedoeld voor partners/collega's die alle productinfo per SKU/EAN nodig hebben.

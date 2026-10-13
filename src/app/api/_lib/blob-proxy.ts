@@ -1,4 +1,4 @@
-import { head } from "@vercel/blob";
+import { resolveFeedFile } from "@/lib/feed-manifest.mjs";
 import { NextResponse } from "next/server";
 
 /**
@@ -6,11 +6,16 @@ import { NextResponse } from "next/server";
  */
 export async function serveBlobFile(
   blobFilename: string,
-  errorLabel: string = "data"
+  errorLabel: string = "data",
+  request?: Request
 ) {
   try {
-    const blobMeta = await head(blobFilename);
-    const blobResponse = await fetch(blobMeta.url);
+    const generation = request ? new URL(request.url).searchParams.get("generation") : null;
+    if (generation !== null && !/^[a-zA-Z0-9-]{1,100}$/.test(generation)) {
+      return NextResponse.json({ error: "Ongeldige generatie" }, { status: 400 });
+    }
+    const file = await resolveFeedFile(blobFilename, { generation });
+    const blobResponse = await fetch(file.url, { cache: "no-store" });
 
     if (!blobResponse.ok) {
       return NextResponse.json(
@@ -23,15 +28,18 @@ export async function serveBlobFile(
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600",
+        // Independent endpoint caches could keep different generations active.
+        "Cache-Control": "no-store",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Expose-Headers": "X-Feed-Generation",
+        ...(file.generation ? { "X-Feed-Generation": file.generation } : {}),
       },
     });
   } catch {
     return NextResponse.json(
       {
-        error: `${errorLabel} nog niet beschikbaar. De eerste crawl moet nog draaien.`,
+        error: `${errorLabel} momenteel niet beschikbaar.`,
       },
       { status: 503 }
     );

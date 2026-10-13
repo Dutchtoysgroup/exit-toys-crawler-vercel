@@ -22,7 +22,7 @@ function isValidCategory(value: string): value is Category {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ category: string }> }
 ) {
   const { category } = await params;
@@ -37,7 +37,7 @@ export async function GET(
     );
   }
 
-  return serveBlobFile(`producten-${category}.json`, `producten-${category}`);
+  return serveBlobFile(`producten-${category}.json`, `producten-${category}`, request);
 }
 
 export async function OPTIONS() {

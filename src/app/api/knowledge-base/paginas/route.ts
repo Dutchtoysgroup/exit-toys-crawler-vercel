@@ -2,8 +2,8 @@ import { corsOptions, serveBlobFile } from "../../_lib/blob-proxy";
 
 export const runtime = "edge";
 
-export async function GET() {
-  return serveBlobFile("paginas.json", "pagina's");
+export async function GET(request: Request) {
+  return serveBlobFile("paginas.json", "pagina's", request);
 }
 
 export async function OPTIONS() {

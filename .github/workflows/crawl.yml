@@ -11,6 +11,13 @@ on:
         type: boolean
         default: false
 
+# One publisher for this store across branches, schedules and manual runs.
+# Let a running publication finish; immutable files + conditional manifest writes
+# also protect against stale reruns and publishers outside this workflow.
+concurrency:
+  group: exit-toys-feed-publication
+  cancel-in-progress: false
+
 jobs:
   crawl-and-upload:
     runs-on: ubuntu-latest
