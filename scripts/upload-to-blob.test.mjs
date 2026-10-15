@@ -178,6 +178,18 @@ for (const locale of ["nl", "de"]) {
       assert.deepEqual(JSON.parse(saved.data), data);
     }
   });
+
+  test(`${locale}: CDN weak ETags of the same version are accepted`, async (t) => {
+    const context = await setup(t, locale, false);
+    context.store.seed(manifestKey(locale), JSON.stringify({ entries: { total: 3 } }));
+    // Production CDN serves compressed bodies as W/"<tag>" while head() reports "<tag>".
+    context.store.onFetch = (key) => {
+      const value = context.store.blobs.get(key);
+      return value ? new Response(value.data, { headers: { etag: `W/${value.etag}` } }) : null;
+    };
+    const current = await publishGeneration(context);
+    await assertActive(context, current.generation, context.newData);
+  });
 }
 
 for (const [name, mutate] of Object.entries({
@@ -201,6 +213,8 @@ for (const [name, mutate] of Object.entries({
 test("reader rejects incomplete manifests and stale CDN bodies instead of falling back", async (t) => {
   const context = await setup(t, "nl");
   context.store.onFetch = (key) => key === manifestKey("nl") ? new Response(JSON.stringify(context.previous), { headers: { etag: '"stale"' } }) : null;
+  await assert.rejects(resolveFeedFile("producten.json", context), /changed while reading/);
+  context.store.onFetch = (key) => key === manifestKey("nl") ? new Response(JSON.stringify(context.previous), { headers: { etag: 'W/"stale"' } }) : null;
   await assert.rejects(resolveFeedFile("producten.json", context), /changed while reading/);
   context.store.onFetch = null;
   const broken = structuredClone(context.previous);

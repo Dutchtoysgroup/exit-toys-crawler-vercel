@@ -55,6 +55,12 @@ export function validateManifest(manifest, locale, origin) {
  * @property {typeof fetch} [fetchBlob]
  */
 
+// Weak comparison (RFC 9110): the CDN serves a compressed body as W/"<tag>" of the same version.
+function sameEtag(a, b) {
+  const opaque = (tag) => (typeof tag === "string" ? tag.replace(/^W\//, "") : null);
+  return opaque(a) !== null && opaque(a) === opaque(b);
+}
+
 /**
  * Read one pointer version; never combine a cached body with a newer ETag.
  * @param {string} locale
@@ -73,7 +79,7 @@ export async function readFeedManifest(locale, { generation = null, headBlob = h
   const url = new URL(blob.url);
   url.searchParams.set("version", blob.etag);
   const response = await fetchBlob(url.href, { cache: "no-store" });
-  if (!response.ok || response.headers.get("etag") !== blob.etag) throw new Error("Manifest unavailable or changed while reading");
+  if (!response.ok || !sameEtag(response.headers.get("etag"), blob.etag)) throw new Error("Manifest unavailable or changed while reading");
   const manifest = await response.json();
   if (manifest?.schemaVersion !== undefined || manifest?.generation !== undefined || generation) {
     validateManifest(manifest, locale, new URL(blob.url).origin);
