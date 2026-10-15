@@ -216,6 +216,12 @@ async def run_crawler(force: bool = False):
     logger.info(f"Blogs:       {len(results.get('blogs', []))}")
     logger.info(f"Pagina's:    {len(results.get('pages', []))}")
     logger.info(f"Onderdelen:  {len(results.get('parts', []))}")
+    logger.info(f"Fouten:      {state.error_count}")
+    for source in state.failures:
+        logger.info(f"  - {source}")
+    logger.info(f"Overgeslagen (geen inhoud herkend): {len(state.skipped)}")
+    for url in state.skipped:
+        logger.info(f"  - {url}")
     logger.info(f"Totale tijd: {elapsed:.0f}s ({elapsed / 60:.1f} min)")
     logger.info("=" * 60)
 

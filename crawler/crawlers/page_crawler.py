@@ -69,8 +69,9 @@ class PageCrawler:
                             self.state.add_result("pages", page_data)
                             progress.success()
                         else:
-                            self.state.record_failure(url)
-                            progress.fail()
+                            # Pagina is wel opgehaald maar heeft een andere layout.
+                            self.state.record_skip(url, "geen page-inhoud herkend")
+                            progress.skip()
                     except Exception as e:
                         logger.error(f"Page parse fout voor {url}: {e}")
                         self.state.record_failure(url)

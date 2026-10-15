@@ -85,7 +85,9 @@ export function evaluate(stats, history, locale) {
 
   const reject = (message) => { hardBlock = true; problems.push(message); };
   if (stats.crawl_status !== "completed" || stats.error_count !== 0 || stats.products !== stats.product_urls) {
-    reject(`Crawl onvolledig: status=${stats.crawl_status}, fouten=${stats.error_count}, producten=${stats.products}/${stats.product_urls}`);
+    const sources = Array.isArray(stats.failed_sources) ? stats.failed_sources.filter((s) => typeof s === "string") : [];
+    const detail = sources.length ? ` (${sources.slice(0, 10).join(", ")}${sources.length > 10 ? ", ..." : ""})` : "";
+    reject(`Crawl onvolledig: status=${stats.crawl_status}, fouten=${stats.error_count}, producten=${stats.products}/${stats.product_urls}${detail}`);
   }
   const limits = LIMITS[locale];
   for (const key of ["products", "product_urls", "parts", "marketplace_entries"]) {

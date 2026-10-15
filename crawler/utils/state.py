@@ -15,6 +15,7 @@ class CrawlState:
     def __init__(self):
         self.state = {
             "failures": [],
+            "skipped": [],
             "completed_urls": [],
             "discovered_urls": {},
             "phase": "init",
@@ -57,10 +58,25 @@ class CrawlState:
         """Afgehandeld betekent niet geslaagd; bewaar fouten ook bij hervatten."""
         if source not in self.state["failures"]:
             self.state["failures"].append(source)
+            logger.warning(f"Crawlfout: {source}")
+
+    def record_skip(self, url: str, reason: str):
+        """Bereikbare pagina zonder bruikbare inhoud (andere layout): geen crawlfout."""
+        if url not in self.state["skipped"]:
+            self.state["skipped"].append(url)
+            logger.warning(f"Overgeslagen ({reason}): {url}")
 
     @property
     def error_count(self) -> int:
         return len(self.state["failures"])
+
+    @property
+    def failures(self) -> list[str]:
+        return list(self.state["failures"])
+
+    @property
+    def skipped(self) -> list[str]:
+        return list(self.state["skipped"])
 
     def add_result(self, category: str, entry: dict):
         if category in self.state["results"]:
@@ -98,6 +114,7 @@ class CrawlState:
     def reset(self):
         self.state = {
             "failures": [],
+            "skipped": [],
             "completed_urls": [],
             "discovered_urls": {},
             "phase": "init",

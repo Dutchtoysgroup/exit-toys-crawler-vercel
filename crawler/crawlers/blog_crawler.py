@@ -71,8 +71,9 @@ class BlogCrawler:
                             self.state.add_result("blogs", blog)
                             progress.success()
                         else:
-                            self.state.record_failure(url)
-                            progress.fail()
+                            # Pagina is wel opgehaald maar heeft een andere layout.
+                            self.state.record_skip(url, "geen blog-inhoud herkend")
+                            progress.skip()
                     except Exception as e:
                         logger.error(f"Blog parse fout voor {url}: {e}")
                         self.state.record_failure(url)

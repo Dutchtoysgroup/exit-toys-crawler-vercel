@@ -93,8 +93,33 @@ class HealthStatsTests(unittest.TestCase):
                     if scenario == "parse":
                         crawler.parser.parse.side_effect = ValueError("parse failed")
                     asyncio.run(crawler.crawl_all(["url"]))
-                    self.assertEqual(self.state.error_count, 1)
+                    skipped = scenario == "empty" and cls in (BlogCrawler, PageCrawler)
+                    self.assertEqual(self.state.error_count, 0 if skipped else 1)
+                    self.assertEqual(self.state.skipped, ["url"] if skipped else [])
                     self.assertTrue(self.state.is_completed("url"))
+
+    def test_skipped_pages_keep_crawl_completed_but_stay_visible(self):
+        self.fill_products()
+        self.state.record_skip("https://example.test/andere-layout", "geen page-inhoud herkend")
+        self.state.set_phase("done")
+        self.state.save()
+        self.assertEqual(CrawlState().skipped, ["https://example.test/andere-layout"])
+        stats = build_crawl_stats(self.state, "nl", 500)
+        self.assertEqual(stats["crawl_status"], "completed")
+        self.assertEqual(stats["error_count"], 0)
+        self.assertEqual(stats["skipped_count"], 1)
+        self.assertEqual(stats["skipped_sources"], ["https://example.test/andere-layout"])
+        self.assertFalse(self.evaluate_in_js(stats)["hardBlock"])
+
+    def test_failed_sources_are_named_in_rejection(self):
+        self.fill_products()
+        self.state.record_failure("https://example.test/kapot")
+        self.state.set_phase("done")
+        stats = build_crawl_stats(self.state, "nl", 500)
+        self.assertEqual(stats["failed_sources"], ["https://example.test/kapot"])
+        result = self.evaluate_in_js(stats)
+        self.assertTrue(result["hardBlock"])
+        self.assertTrue(any("https://example.test/kapot" in problem for problem in result["problems"]))
 
     def test_successful_parse_does_not_record_failure(self):
         crawler = ProductCrawler(SimpleNamespace(fetch_many=AsyncMock(return_value={"url": "html"})), self.state)
