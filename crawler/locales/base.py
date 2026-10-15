@@ -15,7 +15,6 @@ class LocaleConfig:
     # URL paden
     faq_index_path: str
     blog_index_path: str
-    parts_path: str
     category_pages: list[str]
     skip_paths: set[str]
 

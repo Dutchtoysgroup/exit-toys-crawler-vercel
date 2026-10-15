@@ -17,7 +17,6 @@ from crawlers.blog_crawler import BlogCrawler
 from crawlers.category_crawler import CategoryCrawler
 from crawlers.faq_crawler import FAQCrawler
 from crawlers.page_crawler import PageCrawler
-from crawlers.parts_crawler import PartsCrawler
 from crawlers.product_crawler import ProductCrawler
 from crawlers.sitemap_parser import SitemapParser
 from utils.health_stats import build_crawl_stats
@@ -147,48 +146,22 @@ class HealthStatsTests(unittest.TestCase):
                 asyncio.run(getattr(crawler, method)(arg))
                 self.assertGreater(self.state.error_count, 0)
 
-    def test_swallowed_parts_exception_produces_blocked_stats_after_generation(self):
+    def test_resumed_parts_phase_continues_to_generation(self):
+        # State van voor het schrappen van de onderdelen-crawler mag niet blijven hangen.
         self.fill_products()
         self.state.set_phase("crawl_parts")
         marketplace = self.root / "marketplace.json"
         marketplace.write_text(json.dumps([{}] * 500))
-        parts = SimpleNamespace(discover_and_crawl=AsyncMock(side_effect=RuntimeError("browser failed")))
         with patch.object(main, "CrawlState", return_value=self.state), \
              patch.object(main, "BaseCrawler", return_value=AsyncMock()), \
-             patch.object(main, "PartsCrawler", return_value=parts), \
              patch.object(main, "KnowledgeBaseGenerator"), \
              patch.object(main, "OUTPUT_DIR", self.root), \
              patch.object(main, "KB_MARKETPLACE_FILE", marketplace):
             asyncio.run(main.run_crawler())
         stats = json.loads((self.root / "crawl-stats.json").read_text())
         self.assertEqual(stats["phase"], "done")
-        self.assertEqual(stats["crawl_status"], "partial")
-        self.assertEqual(stats["error_count"], 1)
-        self.assertTrue(self.evaluate_in_js(stats)["hardBlock"])
-
-    def test_parts_http_and_parse_failures_are_recorded(self):
-        for statuses in ([500], [200, 500], [200, 404, 500], [200, 404, 200]):
-            with self.subTest(statuses=statuses):
-                self.state.reset()
-                page = SimpleNamespace(
-                    goto=AsyncMock(side_effect=[SimpleNamespace(status=status) for status in statuses]),
-                    query_selector_all=AsyncMock(return_value=[]),
-                    content=AsyncMock(return_value="html"),
-                )
-                context = SimpleNamespace(new_page=AsyncMock(return_value=page))
-                browser = SimpleNamespace(new_context=AsyncMock(return_value=context), close=AsyncMock())
-                playwright = AsyncMock()
-                playwright.__aenter__.return_value = SimpleNamespace(chromium=SimpleNamespace(launch=AsyncMock(return_value=browser)))
-                crawler = PartsCrawler(self.state)
-                crawler._extract_product_urls = AsyncMock(return_value={"url"})
-                crawler.parser = Mock()
-                crawler.parser.parse.return_value = None
-                with patch("playwright.async_api.async_playwright", return_value=playwright), \
-                     patch("crawlers.parts_crawler.asyncio.sleep", new_callable=AsyncMock):
-                    asyncio.run(crawler.discover_and_crawl())
-                self.assertGreater(self.state.error_count, 0)
-                self.assertGreater(CrawlState().error_count, 0)
-                browser.close.assert_awaited_once()
+        self.assertEqual(stats["error_count"], 0)
+        self.assertEqual(stats["additional_parts"], 0)
 
     def test_new_crash_removes_stale_stats(self):
         stats_file = self.root / "crawl-stats.json"

@@ -40,7 +40,6 @@ from crawlers.blog_crawler import BlogCrawler
 from crawlers.category_crawler import CategoryCrawler
 from crawlers.faq_crawler import FAQCrawler
 from crawlers.page_crawler import PageCrawler
-from crawlers.parts_crawler import PartsCrawler
 from crawlers.product_crawler import ProductCrawler
 from crawlers.sitemap_parser import SitemapParser
 from formatters.knowledge_base import KnowledgeBaseGenerator
@@ -177,18 +176,12 @@ async def run_crawler(force: bool = False):
             logger.info("3d: Pagina's crawlen")
             page_crawler = PageCrawler(crawler, state)
             await page_crawler.crawl_all(state.get_discovered_urls("pages"))
-            state.set_phase("crawl_parts")
+            state.set_phase("generate")
 
-    # 3e: Onderdelen (Playwright - eigen browser sessie)
+    # Onderdelen komen als gewone producten binnen via sitemap-spareparts.xml. De aparte
+    # Playwright-crawler voor /onderdelen is in okt 2026 geschrapt (zie README); een
+    # bewaarde state van daarvoor gaat gewoon door naar genereren.
     if state.phase == "crawl_parts":
-        logger.info("-" * 40)
-        logger.info("3e: Onderdelen crawlen (Playwright)")
-        try:
-            parts_crawler = PartsCrawler(state)
-            await parts_crawler.discover_and_crawl()
-        except Exception as e:
-            logger.error(f"Onderdelen crawl overgeslagen: {e}")
-            state.record_failure("parts:phase")
         state.set_phase("generate")
 
     # ============================================================
@@ -215,7 +208,6 @@ async def run_crawler(force: bool = False):
     logger.info(f"FAQs:        {len(results.get('faqs', []))}")
     logger.info(f"Blogs:       {len(results.get('blogs', []))}")
     logger.info(f"Pagina's:    {len(results.get('pages', []))}")
-    logger.info(f"Onderdelen:  {len(results.get('parts', []))}")
     logger.info(f"Fouten:      {state.error_count}")
     for source in state.failures:
         logger.info(f"  - {source}")

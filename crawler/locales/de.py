@@ -8,7 +8,6 @@ DE_CONFIG = LocaleConfig(
 
     faq_index_path="/kundenservice/haufig-gestellte-fragen",
     blog_index_path="/exit-toys/blog",
-    parts_path="/ersatzteile",
 
     category_pages=[
         "/trampolin",

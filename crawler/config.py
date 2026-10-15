@@ -68,7 +68,6 @@ USER_AGENT = LOCALE_CONFIG.user_agent
 FAQ_INDEX_URL = f"{BASE_URL}{LOCALE_CONFIG.faq_index_path}"
 FAQ_INDEX_PATH = LOCALE_CONFIG.faq_index_path
 BLOG_INDEX_URL = f"{BASE_URL}{LOCALE_CONFIG.blog_index_path}"
-PARTS_BASE_URL = f"{BASE_URL}{LOCALE_CONFIG.parts_path}"
 
 # Categoriepagina's voor product-discovery
 CATEGORY_PAGES = LOCALE_CONFIG.category_pages

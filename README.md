@@ -148,6 +148,8 @@ Na elke handmatige crawl moet je ook **handmatig een sync triggeren in Robin**, 
 | **Blogs** | Alle blogartikelen | Tips, gidsen, productnieuws |
 | **Pagina's** | Informatiepagina's | Over ons, contact, leveringsinfo |
 
+De onderdelen komen alleen nog via `sitemap-spareparts.xml` binnen. Er was ook een aparte Playwright-crawler voor `/onderdelen` (DE: `/ersatzteile`). Die vond sinds de site daar een keuzehulp (type → serie → maat) van maakte niets meer. Hij is in oktober 2026 geschrapt: een volledige doorloop van die keuzehulp leverde 1.287 (NL) en 1.293 (DE) onderdelen op, en die stonden allemaal al in de sitemap.
+
 De crawler slaat de volgende pagina's bewust over: homepage, zoekpagina, winkelwagen, account en checkout.
 
 ---
@@ -222,7 +224,7 @@ Is een relatieve daling terecht (bijvoorbeeld een kleiner assortiment)? Start de
 
 De conservatieve absolute grenzen staan per land in `scripts/lib/crawl-health-evaluation.mjs`. Voor NL én DE zijn dit minimaal 500 ontdekte en gelezen producten, 500 marketplace-items, 100 onderdelen en 100 reguliere producten. Alle ontdekte product-URL's moeten een product hebben opgeleverd; de marketplace-feed moet minimaal 90% van de gelezen producten inclusief aanvullende onderdelen bevatten. Ontbrekende of inconsistente aantallen en niet-eindige getallen worden afgekeurd.
 
-De crawler schrijft `schema_version=1`, `phase=done`, `crawl_status` en `error_count`. Mislukte fetches, parsing, sitemaps en onderdelenstappen worden in de hervatbare state bewaard en leiden tot `crawl_status=partial`. Alleen `completed` zonder fouten kan worden goedgekeurd. Oude historie zonder dit schema en expliciete `approved=true` telt niet als referentie: de eerste nieuwe run valt terug op alle absolute controles, met een zichtbare waarschuwing.
+De crawler schrijft `schema_version=1`, `phase=done`, `crawl_status` en `error_count`. Mislukte fetches, parsing en sitemaps worden in de hervatbare state bewaard en leiden tot `crawl_status=partial`. Alleen `completed` zonder fouten kan worden goedgekeurd. Oude historie zonder dit schema en expliciete `approved=true` telt niet als referentie: de eerste nieuwe run valt terug op alle absolute controles, met een zichtbare waarschuwing.
 
 Upload vereist expliciet `ready=true` van een afgeronde healthcheck. De beoordeling wordt vóór de optionele e-mail geschreven: een mailfout kan een afgekeurde feed nooit vrijgeven. Een mailfout bij een toegestane of bewust geforceerde beoordeling geeft een waarschuwing en houdt de upload niet tegen. Een afkeuring of crash stopt ook de resterende crawl-/uploadstappen; eventuele eerdere uploads blijven staan.
 
@@ -278,7 +280,7 @@ Je krijgt dan de volledige kennisbank te zien als tekst (dit is het ruwe bestand
 <summary>Klik om technische details te bekijken</summary>
 
 ### Stack
-- **Crawler**: Python 3.12 (aiohttp, BeautifulSoup4, Playwright)
+- **Crawler**: Python 3.12 (aiohttp, BeautifulSoup4)
 - **Frontend/API**: Next.js 16, React 19, TypeScript
 - **Hosting**: Vercel (Edge runtime)
 - **Opslag**: Vercel Blob Storage

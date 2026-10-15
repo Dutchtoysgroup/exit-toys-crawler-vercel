@@ -8,7 +8,6 @@ NL_CONFIG = LocaleConfig(
 
     faq_index_path="/klantenservice/veelgestelde-vragen",
     blog_index_path="/exit-toys/blog",
-    parts_path="/onderdelen",
 
     category_pages=[
         "/trampolines",
