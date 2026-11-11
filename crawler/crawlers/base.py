@@ -7,7 +7,7 @@ import logging
 
 import aiohttp
 
-from config import MAX_CONCURRENT, REQUEST_TIMEOUT, USER_AGENT
+from config import MAX_CONCURRENT, REQUEST_TIMEOUT, REQUESTS_PER_SECOND, USER_AGENT
 from utils.rate_limiter import RateLimiter
 from utils.retry import retry
 
@@ -19,7 +19,7 @@ class BaseCrawler:
 
     def __init__(self):
         self.semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-        self.rate_limiter = RateLimiter()
+        self.rate_limiter = RateLimiter(REQUESTS_PER_SECOND)
         self.session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self):

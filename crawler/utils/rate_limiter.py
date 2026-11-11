@@ -1,34 +1,22 @@
-"""Token bucket rate limiter voor async HTTP requests."""
+"""Rate limiter voor async HTTP requests."""
 
 import asyncio
 import time
 
 
 class RateLimiter:
-    """Token bucket rate limiter.
+    """Geeft verzoeken gelijkmatig vrij: nooit meer dan `rate` per seconde, zonder pieken."""
 
-    Beperkt het aantal requests per seconde door tokens bij te vullen
-    met een vast tempo.
-    """
-
-    def __init__(self, rate: float = 2.0, burst: int = 3):
-        self.rate = rate
-        self.burst = burst
-        self.tokens = burst
-        self.last_refill = time.monotonic()
-        self._lock = asyncio.Lock()
+    def __init__(self, rate: float):
+        self.interval = 1 / rate
+        self._next_slot = 0.0
 
     async def acquire(self):
-        """Wacht tot een token beschikbaar is."""
-        async with self._lock:
-            now = time.monotonic()
-            elapsed = now - self.last_refill
-            self.tokens = min(self.burst, self.tokens + elapsed * self.rate)
-            self.last_refill = now
-
-            if self.tokens < 1:
-                wait_time = (1 - self.tokens) / self.rate
-                await asyncio.sleep(wait_time)
-                self.tokens = 0
-            else:
-                self.tokens -= 1
+        """Wacht tot het volgende vrije moment."""
+        now = time.monotonic()
+        slot = max(now, self._next_slot)
+        # Reserveer het moment vóór het wachten, zodat gelijktijdige aanroepen elk een eigen
+        # moment krijgen.
+        self._next_slot = slot + self.interval
+        if slot > now:
+            await asyncio.sleep(slot - now)
