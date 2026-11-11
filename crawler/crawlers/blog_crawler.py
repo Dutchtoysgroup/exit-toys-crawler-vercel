@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from config import BASE_URL, BATCH_SIZE, BLOG_INDEX_URL, LOCALE_CONFIG
-from crawlers.base import BaseCrawler
+from crawlers.base import BaseCrawler, prefetch_batches
 from parsers.blog_parser import BlogParser
 from utils.progress import ProgressTracker
 from utils.state import CrawlState
@@ -58,15 +59,12 @@ class BlogCrawler:
 
         progress = ProgressTracker(len(pending), "Blogs")
 
-        for i in range(0, len(pending), BATCH_SIZE):
-            batch = pending[i : i + BATCH_SIZE]
-            html_map = await self.crawler.fetch_many(batch)
-
+        async for batch, html_map in prefetch_batches(self.crawler, pending, BATCH_SIZE):
             for url in batch:
                 html = html_map.get(url)
                 if html:
                     try:
-                        blog = self.parser.parse(url, html)
+                        blog = await asyncio.to_thread(self.parser.parse, url, html)
                         if blog:
                             self.state.add_result("blogs", blog)
                             progress.success()

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from config import BATCH_SIZE, LOCALE_CONFIG
-from crawlers.base import BaseCrawler
+from crawlers.base import BaseCrawler, prefetch_batches
 from parsers.product_parser import ProductParser
 from utils.progress import ProgressTracker
 from utils.state import CrawlState
@@ -35,15 +36,12 @@ class ProductCrawler:
         progress = ProgressTracker(len(pending), "Producten")
         results = []
 
-        for i in range(0, len(pending), BATCH_SIZE):
-            batch = pending[i : i + BATCH_SIZE]
-            html_map = await self.crawler.fetch_many(batch)
-
+        async for batch, html_map in prefetch_batches(self.crawler, pending, BATCH_SIZE):
             for url in batch:
                 html = html_map.get(url)
                 if html:
                     try:
-                        product = self.parser.parse(url, html)
+                        product = await asyncio.to_thread(self.parser.parse, url, html)
                         if product:
                             results.append(product)
                             self.state.add_result("products", product)

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from config import BASE_URL, BATCH_SIZE, JOB_POSTING_KEYWORD, LOCALE_CONFIG, SKIP_PATHS
-from crawlers.base import BaseCrawler
+from crawlers.base import BaseCrawler, prefetch_batches
 from parsers.page_parser import PageParser
 from utils.progress import ProgressTracker
 from utils.state import CrawlState
@@ -56,15 +57,12 @@ class PageCrawler:
 
         progress = ProgressTracker(len(pending), "Pagina's")
 
-        for i in range(0, len(pending), BATCH_SIZE):
-            batch = pending[i : i + BATCH_SIZE]
-            html_map = await self.crawler.fetch_many(batch)
-
+        async for batch, html_map in prefetch_batches(self.crawler, pending, BATCH_SIZE):
             for url in batch:
                 html = html_map.get(url)
                 if html:
                     try:
-                        page_data = self.parser.parse(url, html)
+                        page_data = await asyncio.to_thread(self.parser.parse, url, html)
                         if page_data:
                             self.state.add_result("pages", page_data)
                             progress.success()

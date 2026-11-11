@@ -14,6 +14,30 @@ from utils.retry import retry
 logger = logging.getLogger(__name__)
 
 
+async def prefetch_batches(crawler, urls: list[str], batch_size: int):
+    """Lever (batch, html_map) per batch en haal de volgende batch alvast op.
+
+    Het parsen van een batch kost seconden (ca. 70 ms per productpagina). Zonder vooruit
+    ophalen lag het downloaden al die tijd stil: ruim twee minuten per land.
+    De afnemer parset in een thread (`asyncio.to_thread`), anders blokkeert het parsen de
+    event loop en loopt de volgende batch alsnog niet door.
+    """
+    batches = [urls[i : i + batch_size] for i in range(0, len(urls), batch_size)]
+    upcoming = asyncio.create_task(crawler.fetch_many(batches[0])) if batches else None
+    try:
+        for index, batch in enumerate(batches):
+            html_map = await upcoming
+            upcoming = (
+                asyncio.create_task(crawler.fetch_many(batches[index + 1]))
+                if index + 1 < len(batches)
+                else None
+            )
+            yield batch, html_map
+    finally:
+        if upcoming and not upcoming.done():
+            upcoming.cancel()
+
+
 class BaseCrawler:
     """Async HTTP crawler met ingebouwde rate limiting en retries."""
 

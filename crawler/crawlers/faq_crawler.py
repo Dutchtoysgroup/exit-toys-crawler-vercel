@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from config import BASE_URL, BATCH_SIZE, FAQ_INDEX_PATH, FAQ_INDEX_URL
-from crawlers.base import BaseCrawler
+from crawlers.base import BaseCrawler, prefetch_batches
 from parsers.faq_parser import FAQParser
 from utils.progress import ProgressTracker
 from utils.state import CrawlState
@@ -58,15 +59,12 @@ class FAQCrawler:
 
         progress = ProgressTracker(len(pending), "FAQs")
 
-        for i in range(0, len(pending), BATCH_SIZE):
-            batch = pending[i : i + BATCH_SIZE]
-            html_map = await self.crawler.fetch_many(batch)
-
+        async for batch, html_map in prefetch_batches(self.crawler, pending, BATCH_SIZE):
             for url in batch:
                 html = html_map.get(url)
                 if html:
                     try:
-                        faqs = self.parser.parse(url, html)
+                        faqs = await asyncio.to_thread(self.parser.parse, url, html)
                         if faqs:
                             self.state.add_results("faqs", faqs)
                             progress.success()
