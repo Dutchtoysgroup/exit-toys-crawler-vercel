@@ -1,4 +1,4 @@
-"""Base async HTTP crawler met rate limiting, retries en semaphore."""
+"""Base async HTTP crawler met rate limiting, retries en een vast aantal banen."""
 
 from __future__ import annotations
 
@@ -18,31 +18,39 @@ class BaseCrawler:
     """Async HTTP crawler met ingebouwde rate limiting en retries."""
 
     def __init__(self):
-        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT)
         self.rate_limiter = RateLimiter(REQUESTS_PER_SECOND)
-        self.session: aiohttp.ClientSession | None = None
+        self._sessions: list[aiohttp.ClientSession] = []
+        self._lanes: asyncio.Queue[aiohttp.ClientSession] = asyncio.Queue()
 
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession(
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-        )
+        # Elke baan heeft een eigen cookie-sessie. De webshop handelt verzoeken met hetzelfde
+        # sessiecookie na elkaar af, dus met één gedeelde sessie wachtten gelijktijdige
+        # verzoeken alsnog op elkaar (gemeten nov 2026: 2,4 pagina's/s met één sessie
+        # tegen 4,5/s met drie, bij dezelfde drie gelijktijdige verzoeken).
+        for _ in range(MAX_CONCURRENT):
+            session = aiohttp.ClientSession(
+                headers={"User-Agent": USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            )
+            self._sessions.append(session)
+            self._lanes.put_nowait(session)
         return self
 
     async def __aexit__(self, *args):
-        if self.session:
-            await self.session.close()
+        for session in self._sessions:
+            await session.close()
 
     @retry(max_retries=3, backoff_factor=2.0, exceptions=(aiohttp.ClientError, asyncio.TimeoutError))
     async def fetch(self, url: str, timeout: float | None = None) -> str | None:
-        """Haal een URL op met rate limiting en semaphore.
+        """Haal een URL op met rate limiting, via een vrije baan.
 
         `timeout` overschrijft REQUEST_TIMEOUT voor trage bestanden zoals grote sitemaps.
         """
         kwargs = {"timeout": aiohttp.ClientTimeout(total=timeout)} if timeout else {}
-        async with self.semaphore:
+        session = await self._lanes.get()
+        try:
             await self.rate_limiter.acquire()
-            async with self.session.get(url, **kwargs) as response:
+            async with session.get(url, **kwargs) as response:
                 if response.status == 404:
                     logger.debug(f"404: {url}")
                     return None
@@ -53,6 +61,8 @@ class BaseCrawler:
                     raise aiohttp.ClientError(f"429 Too Many Requests: {url}")
                 response.raise_for_status()
                 return await response.text()
+        finally:
+            self._lanes.put_nowait(session)
 
     async def fetch_many(self, urls: list[str]) -> dict[str, str | None]:
         """Haal meerdere URLs op, retourneert dict van url -> html."""

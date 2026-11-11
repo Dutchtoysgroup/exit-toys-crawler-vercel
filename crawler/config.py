@@ -51,9 +51,10 @@ SITEMAPS = [
     f"{BASE_URL}/sitemap-blog.xml",
 ]
 
-# Rate limiting
+# Rate limiting. exittoys.nl en .de draaien op dezelfde server, die rond 4,7 pagina's/s
+# verzadigt (gemeten nov 2026). 3/s laat ruimte over voor bezoekers van de webshop.
 MAX_CONCURRENT = 3
-REQUESTS_PER_SECOND = 2.0
+REQUESTS_PER_SECOND = 3.0
 REQUEST_TIMEOUT = 30
 RETRY_COUNT = 3
 RETRY_BACKOFF = 2  # exponential backoff factor
