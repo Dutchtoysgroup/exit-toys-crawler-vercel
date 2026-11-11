@@ -81,11 +81,11 @@ De makkelijkste manier — geen GitHub-account nodig.
    - Klik op **"Ja, start de crawl"** om te bevestigen, of op **"Annuleren"** om af te breken
 
 4. **Wacht tot het klaar is:**
-   - De crawl duurt 20–45 minuten
+   - De crawl duurt 30–40 minuten
    - Als er al een crawl draait, krijg je hier een melding van
 
 5. **Controleer het resultaat:**
-   - Ververs het dashboard na 20–45 minuten
+   - Ververs het dashboard na 30–40 minuten
    - Controleer of de "Laatste update" is bijgewerkt
 
 ### Optie 2: Via GitHub Actions
@@ -105,7 +105,7 @@ Alternatief voor wie toegang heeft tot GitHub.
 
 4. **Wacht tot het klaar is:**
    - Je ziet een nieuwe run verschijnen met een geel bolletje (= bezig)
-   - Na 20-45 minuten wordt dit een groen vinkje (= gelukt) of een rood kruisje (= mislukt)
+   - Na 30-40 minuten wordt dit een groen vinkje (= gelukt) of een rood kruisje (= mislukt)
 
 5. **Controleer het resultaat:**
    - Ga naar het dashboard: https://exit-toys-crawler-vercel.vercel.app
@@ -131,7 +131,7 @@ Na elke handmatige crawl moet je ook **handmatig een sync triggeren in Robin**, 
 ### Let op
 
 - **Start geen nieuwe crawl als er al een draait** — het dashboard toont een melding als er een actieve crawl is
-- De crawl duurt 20–45 minuten, dit is normaal
+- De crawl duurt 30–40 minuten, dit is normaal
 - **Vergeet niet de Robin sync!** Na een handmatige crawl moet je altijd ook in Robin op "Sync" klikken
 - Als een crawl mislukt, probeer het nog een keer. Lukt het daarna nog niet? Neem contact op met Sven
 
@@ -315,8 +315,8 @@ exit-toys-crawler-vercel/
 - `GITHUB_PAT` - GitHub Personal Access Token met `actions:write` en `contents:read` scope (opgeslagen in Vercel environment variables). Nodig voor de "Handmatig crawlen" knop op het dashboard.
 
 ### Rate limiting
-- Max 3 gelijktijdige requests naar exittoys.nl
-- Max 2 requests per seconde
+- Max 3 gelijktijdige requests, elk met een eigen sessie (de webshop handelt verzoeken binnen één sessie na elkaar af)
+- Max 3 requests per seconde (`REQUESTS_PER_SECOND` in `crawler/config.py`). exittoys.nl en .de delen één server die rond 4,7 pagina's per seconde verzadigt; hoger gaat ten koste van bezoekers van de webshop
 - 30 seconden timeout per request
 - Automatische retry (max 3 pogingen)
 
