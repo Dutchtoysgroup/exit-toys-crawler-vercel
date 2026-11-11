@@ -57,24 +57,23 @@ export async function publishGeneration({ locale, outputDir, sourceRun, putBlob 
   const prefix = generationPrefix(locale, generation);
   const generationFiles = {};
   const results = {};
-  for (const file of files) {
+  // Each file is uploaded and read back before anything is exposed through the API.
+  // Files are independent, so they go in parallel; a single failure rejects the whole
+  // publication before the manifest is written.
+  await Promise.all(files.map(async (file) => {
     const pathname = `${prefix}${file.name}`;
     const blob = await putBlob(pathname, file.data, {
       access: "public", contentType: "application/json", addRandomSuffix: false, allowOverwrite: false,
     });
+    const response = await fetchBlob(blob.url, { cache: "no-store" });
+    if (!response.ok) throw new Error(`${file.name}: uploaded file unavailable (${response.status})`);
+    const data = Buffer.from(await response.arrayBuffer());
+    if (data.length !== file.fileSizeBytes || sha256(data) !== file.sha256) throw new Error(`${file.name}: uploaded file checksum mismatch`);
     results[file.key] = generationFiles[file.name] = {
       pathname, entries: file.entries.length, fileSizeBytes: file.fileSizeBytes,
       fileSizeMB: (file.fileSizeBytes / (1024 * 1024)).toFixed(2), blobUrl: blob.url, sha256: file.sha256,
     };
-  }
-
-  // Verify every remote byte before exposing any uploaded file through the API.
-  for (const file of files) {
-    const response = await fetchBlob(generationFiles[file.name].blobUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`${file.name}: uploaded file unavailable (${response.status})`);
-    const data = Buffer.from(await response.arrayBuffer());
-    if (data.length !== file.fileSizeBytes || sha256(data) !== file.sha256) throw new Error(`${file.name}: uploaded file checksum mismatch`);
-  }
+  }));
 
   const manifest = {
     schemaVersion: 1, locale, generation, sourceRun, lastUpdated: new Date().toISOString(), generationFiles,
