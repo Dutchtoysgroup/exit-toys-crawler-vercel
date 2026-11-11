@@ -44,8 +44,10 @@ class CrawlState:
 
     def save(self):
         STATE_FILE.parent.mkdir(exist_ok=True)
+        # dumps + één write: json.dump schrijft in kleine stukjes en is op de volle state
+        # (tientallen MB's) ruim twee keer zo traag, bij elke batch opnieuw.
         with open(STATE_FILE, "w") as f:
-            json.dump(self.state, f, ensure_ascii=False)
+            f.write(json.dumps(self.state, ensure_ascii=False))
 
     def is_completed(self, url: str) -> bool:
         return url in self.state["completed_urls"]
